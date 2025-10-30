@@ -1,5 +1,5 @@
 #
-# Akıllı İçerik Platformu (Versiyon 2.4 - Montaj Konumu Düzeltildi)
+# Akıllı İçerik Platformu (Versiyon 3.0 - Kalıcı GCS Depolama)
 # Created by b!g
 #
 
@@ -28,10 +28,15 @@ import docx
 import pptx           
 import pytube         
 
+# --- YENİ BULUT DEPOLAMA KÜTÜPHANESİ ---
+from google.cloud import storage 
+
+
 # --- KULLANICI YÖNETİMİ (Dinamik) ---
 USER_DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.json')
 USERS_DB = {} 
 
+# Kullanıcı Kayıt Modelini Tanımlama
 class UserRegistration(BaseModel):
     user_id: str 
     email: EmailStr 
@@ -44,44 +49,51 @@ def load_users():
         with open(USER_DB_PATH, 'r', encoding='utf-8') as f:
             USERS_DB = json.load(f)
     except FileNotFoundError:
-        print("users.json bulunamadı. Boş veritabanı oluşturuluyor.")
+        # NOTE: Canlı ortamda (Render) bu dosya bulunmayacaktır, bu normaldir.
         USERS_DB = {}
-        save_users()
     except json.JSONDecodeError:
-        print("HATA: users.json dosyası bozuk veya yanlış formatta. Sıfırlanıyor.")
+        print("HATA: users.json dosyası bozuk veya yanlış formatta.")
         USERS_DB = {}
 
 def save_users():
     """Kullanıcı verilerini users.json dosyasına kaydeder."""
+    # NOTE: Canlı ortamda bu fonksiyon çalışsa bile dosya kalıcı olmaz (Transient Storage)
+    # Ancak lokal testler için bu gereklidir.
     with open(USER_DB_PATH, 'w', encoding='utf-8') as f:
         json.dump(USERS_DB, f, indent=4, ensure_ascii=False)
 
 
-# --- GÜVENLİK AYARLARI ---
+# --- GÜVENLİK VE GCS AYARLARI ---
 MAX_FILE_SIZE_MB = 50 
 ALLOWED_EXTENSIONS = {
     ".mp3", ".wav", ".m4a", ".pdf", ".docx", ".doc", ".pptx", ".ppt", 
     ".jpg", ".jpeg", ".png"
 }
 
+# --- GCS DEPOLAMA SABİTLERİ (Render Çevresel Değişkenleri ile çalışır) ---
+GCS_KEY_ENV_VAR = "GCS_SA_KEY" 
+GCS_BUCKET_NAME = "akilli-icerik-raporlari-bbkgzn" # Kendi bucket adınız
+
+
 # --- API Anahtarını Yükleme ---
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-if openai.api_key is None:
+if openai.api_key is None and not os.getenv("RENDER"): 
+    # Sadece lokal çalışmada .env yoksa hata ver
     raise EnvironmentError("OPENAI_API_KEY .env dosyasında ayarlanmamış.")
 
-client = openai.OpenAI(api_key=openai.api_key)
+client = openai.OpenAI(api_key=openai.api_key or os.getenv("OPENAI_API_KEY"))
 
 # UYGULAMA BAŞLANGICI: Kullanıcıları Yükle
 load_users()
-print(f"OpenAI istemcisi API anahtarıyla başarıyla başlatıldı. Yüklü kullanıcı sayısı: {len(USERS_DB)}")
+print(f"OpenAI istemcisi başarıyla başlatıldı. Yüklü kullanıcı sayısı: {len(USERS_DB)}")
 
 # --- FastAPI Sunucusunu Başlatma ---
 app = FastAPI(
     title="Akıllı İçerik Platformu API (Created by b!g)",
     description="Çoklu ortam dosyalarını analiz edip kişiselleştirilmiş raporlar oluşturan platform.",
-    version="0.2.4" 
+    version="0.3.0" 
 )
 
 # CORS Ayarı
@@ -228,7 +240,7 @@ def download_youtube_audio(url: str) -> str:
         if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
             temp_dir = os.path.dirname(temp_file_path)
-            if not os.listdir(temp_dir):
+            if os.path.isdir(temp_dir) and not os.listdir(temp_dir):
                 os.rmdir(temp_dir)
 
 
@@ -283,26 +295,24 @@ Raporun formatı AŞAĞIDAKİ YAPILANDIRILMIŞ ŞEKİLDE, TÜM BAŞLIKLAR ZORUNL
 
 # --- YENİ KULLANICI YÖNETİMİ ENDPOINT'İ ---
 
-@app.post("/register") # Konumdan bağımsız, temel rota tanımı
+@app.post("/register")
 def register_user(user_data: UserRegistration):
     """Yeni kullanıcı kaydını dinamik olarak yapar ve token döndürür."""
-    # 1. Kullanıcı ID'sinin benzersizliğini kontrol et
     for data in USERS_DB.values():
         if data.get("user_id") == user_data.user_id:
             raise HTTPException(status_code=400, detail="Bu kullanıcı ID'si zaten kullanılıyor.")
 
-    # 2. Yeni güvenli bir token oluştur
     new_token = secrets.token_urlsafe(32)
     
-    # 3. Kullanıcı verisini bellekteki DB'ye ekle
     USERS_DB[new_token] = {
         "user_id": user_data.user_id,
         "email": user_data.email,
         "password_hash": "hardcoded_for_demo" 
     }
     
-    # 4. JSON dosyasına kaydet
-    save_users()
+    # Lokal çalışmada users.json'a kaydetmeyi dene
+    if not os.getenv("RENDER"):
+        save_users()
 
     return {
         "user_id": user_data.user_id,
@@ -380,26 +390,43 @@ async def analiz_et_ve_raporla(
         raise HTTPException(status_code=500, detail=f"LLM/Raporlama hatası: {str(e)}")
 
 
-    # 4. KULLANICI BAZLI KAYIT VE GÜVENLİ DEPOLAMA
+    # --- YENİ 4. KULLANICI BAZLI KAYIT VE KALICI GCS DEPOLAMA ---
     try:
-        user_report_dir = os.path.join("reports", user_id)
-        os.makedirs(user_report_dir, exist_ok=True)
+        # 1. GCS İstemcisini Başlatma
+        sa_key_json = os.getenv(GCS_KEY_ENV_VAR)
+        if not sa_key_json:
+            raise Exception("GCS Service Account Key çevresel değişkeni ayarlanmadı.")
+
+        credentials_dict = json.loads(sa_key_json)
         
+        # GCS istemcisini, JSON anahtarını kullanarak oluştur
+        # NOTE: client, burada yerel OpenAI client objesini değil, google.cloud.storage client objesini tutar
+        gcs_client = storage.Client.from_service_account_info(credentials_dict)
+        bucket = gcs_client.bucket(GCS_BUCKET_NAME)
+
+        # 2. Dosya Adını Oluşturma
         temiz_ad = slugify(dosya_adi_temel)
         zaman_damgasi = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-        kayit_adi = f"{temiz_ad}_{zaman_damgasi}.md"
         
-        kayit_yolu = os.path.join(user_report_dir, kayit_adi)
+        # GCS dosya yolu: {kullanici_id}/{dosya_adi}.md
+        gcs_file_name = f"{user_id}/{temiz_ad}_{zaman_damgasi}.md"
         
-        with open(kayit_yolu, "w", encoding="utf-8") as f:
-            f.write(rapor_metni)
+        # 3. GCS'e Yükleme
+        blob = bucket.blob(gcs_file_name)
+        
+        # Rapor metnini UTF-8 olarak doğrudan buluta yükle
+        blob.upload_from_string(
+            data=rapor_metni, 
+            content_type='text/markdown'
+        )
             
-        print(f"Rapor şu yola kaydedildi: {kayit_yolu}")
+        print(f"Rapor başarıyla GCS'e yüklendi: {gcs_file_name}")
         
-        kaydedilen_dosya_url = f"/reports/{user_id}/{kayit_adi}"
+        # 4. Genel Erişim URL'sini Oluşturma
+        kaydedilen_dosya_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{gcs_file_name}"
 
     except Exception as e:
-        print(f"HATA: Rapor diske kaydedilemedi: {e}")
+        print(f"HATA: Rapor GCS'e kaydedilemedi: {e}")
         kaydedilen_dosya_url = None
 
 
@@ -417,5 +444,6 @@ if __name__ == "__main__":
     print("uvicorn backend.main:app --reload")
 
 # --- FRONTEND VE RAPORLAR KLASÖRÜNÜ SUNMA (EN SON YÜKLENMELİ) ---
+# NOTE: /reports artık kullanılmayacak, frontend GCS linkini kullanacak.
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
-app.mount("/reports", StaticFiles(directory="reports"), name="reports")
+# app.mount("/reports", StaticFiles(directory="reports"), name="reports") # Artık GCS'e yönlendirileceği için buna gerek kalmadı
