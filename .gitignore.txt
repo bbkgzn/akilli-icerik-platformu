@@ -1,0 +1,9 @@
+# --- Güvenlik ---
+.env               # Gizli API Anahtarımız
+users.json         # Kullanıcı bilgileri ve Token'ları
+reports/           # Kullanıcı raporları (yüklü olmamalı)
+
+# --- Python ve Ortam Dosyaları ---
+__pycache__/
+*.pyc
+venv/              # Sanal ortam klasörü

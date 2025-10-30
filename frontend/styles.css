@@ -1,0 +1,212 @@
+/* frontend/styles.css */
+
+/* --- RESET & TEMEL STİLLER --- */
+:root {
+    --primary-color: #007bff;
+    --secondary-color: #6c757d;
+    --success-color: #28a745;
+    --error-color: #dc3545;
+    --background-light: #f8f9fa;
+    --background-dark: #ffffff;
+    --border-color: #ced4da;
+    --font-color: #343a40;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: var(--background-light);
+    color: var(--font-color);
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+}
+
+header {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 20px 0;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+header h1 {
+    margin-bottom: 5px;
+}
+
+header p {
+    margin: 0;
+    font-size: 0.9em;
+}
+
+main {
+    max-width: 900px;
+    margin: 30px auto;
+    padding: 0 20px;
+}
+
+section {
+    background-color: var(--background-dark);
+    padding: 30px;
+    margin-bottom: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+h2 {
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+    padding-bottom: 10px;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid var(--border-color);
+    margin: 20px 0;
+}
+
+/* --- FORM VE INPUT STİLLERİ --- */
+input[type="text"], 
+input[type="email"], 
+input[type="password"],
+input[type="url"],
+input[type="file"] {
+    width: calc(100% - 22px);
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s;
+    margin-right: 10px;
+}
+
+button:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+
+button:disabled {
+    background-color: var(--secondary-color);
+    cursor: not-allowed;
+}
+
+/* --- DURUM VE MESAJ STİLLERİ --- */
+.status-message {
+    padding: 10px;
+    margin-top: 15px;
+    border-radius: 4px;
+    display: none; /* Varsayılan olarak gizli */
+}
+
+.status-success {
+    background-color: #d4edda;
+    color: var(--success-color);
+    border: 1px solid #c3e6cb;
+}
+
+.status-error {
+    background-color: #f8d7da;
+    color: var(--error-color);
+    border: 1px solid #f5c6cb;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* --- OR SEPARATOR --- */
+.or-separator {
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    line-height: 0.1em;
+    margin: 10px 0 20px;
+    color: var(--secondary-color);
+}
+
+.or-separator span {
+    background: var(--background-dark);
+    padding: 0 10px;
+}
+
+/* --- PROGRESS BAR --- */
+#progress-container {
+    margin-top: 20px;
+}
+
+#progress-bar {
+    height: 20px;
+    background-color: var(--secondary-color);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.4s ease-in-out;
+}
+
+#progress-text {
+    text-align: center;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+/* --- REPORT SECTION --- */
+#report-section {
+    padding: 0;
+}
+
+.report-header {
+    background-color: #e9ecef;
+    padding: 15px 30px;
+    border-bottom: 1px solid var(--border-color);
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+.markdown-body {
+    padding: 30px;
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+.markdown-body h3 {
+    color: var(--primary-color);
+    border-left: 5px solid var(--primary-color);
+    padding-left: 10px;
+    margin-top: 30px;
+    margin-bottom: 15px;
+}
+
+.markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+}
+
+.markdown-body th, .markdown-body td {
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    text-align: left;
+}
+
+.markdown-body th {
+    background-color: var(--background-light);
+    font-weight: bold;
+}
+
+footer {
+    text-align: center;
+    padding: 20px;
+    font-size: 0.8em;
+    color: var(--secondary-color);
+}
