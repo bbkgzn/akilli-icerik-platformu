@@ -1,5 +1,5 @@
 #
-# Akıllı İçerik Platformu (Versiyon 3.0 - Kalıcı GCS Depolama)
+# Akıllı İçerik Platformu (Versiyon 3.1 - UTF-8 Karakter Düzeltmeli)
 # Created by b!g
 #
 
@@ -49,7 +49,6 @@ def load_users():
         with open(USER_DB_PATH, 'r', encoding='utf-8') as f:
             USERS_DB = json.load(f)
     except FileNotFoundError:
-        # NOTE: Canlı ortamda (Render) bu dosya bulunmayacaktır, bu normaldir.
         USERS_DB = {}
     except json.JSONDecodeError:
         print("HATA: users.json dosyası bozuk veya yanlış formatta.")
@@ -57,8 +56,7 @@ def load_users():
 
 def save_users():
     """Kullanıcı verilerini users.json dosyasına kaydeder."""
-    # NOTE: Canlı ortamda bu fonksiyon çalışsa bile dosya kalıcı olmaz (Transient Storage)
-    # Ancak lokal testler için bu gereklidir.
+    # NOTE: Lokal çalışmada users.json'a kaydetmeyi dener
     with open(USER_DB_PATH, 'w', encoding='utf-8') as f:
         json.dump(USERS_DB, f, indent=4, ensure_ascii=False)
 
@@ -83,6 +81,7 @@ if openai.api_key is None and not os.getenv("RENDER"):
     # Sadece lokal çalışmada .env yoksa hata ver
     raise EnvironmentError("OPENAI_API_KEY .env dosyasında ayarlanmamış.")
 
+# API Key'i çevresel değişkenlerden alarak OpenAI client'ı başlat
 client = openai.OpenAI(api_key=openai.api_key or os.getenv("OPENAI_API_KEY"))
 
 # UYGULAMA BAŞLANGICI: Kullanıcıları Yükle
@@ -93,7 +92,7 @@ print(f"OpenAI istemcisi başarıyla başlatıldı. Yüklü kullanıcı sayısı
 app = FastAPI(
     title="Akıllı İçerik Platformu API (Created by b!g)",
     description="Çoklu ortam dosyalarını analiz edip kişiselleştirilmiş raporlar oluşturan platform.",
-    version="0.3.0" 
+    version="0.3.1" 
 )
 
 # CORS Ayarı
@@ -399,8 +398,6 @@ async def analiz_et_ve_raporla(
 
         credentials_dict = json.loads(sa_key_json)
         
-        # GCS istemcisini, JSON anahtarını kullanarak oluştur
-        # NOTE: client, burada yerel OpenAI client objesini değil, google.cloud.storage client objesini tutar
         gcs_client = storage.Client.from_service_account_info(credentials_dict)
         bucket = gcs_client.bucket(GCS_BUCKET_NAME)
 
@@ -414,10 +411,10 @@ async def analiz_et_ve_raporla(
         # 3. GCS'e Yükleme
         blob = bucket.blob(gcs_file_name)
         
-        # Rapor metnini UTF-8 olarak doğrudan buluta yükle
+        # Rapor metnini UTF-8 olarak kodlayıp yükle ve charset'i belirt (DÜZELTME BURADA)
         blob.upload_from_string(
-            data=rapor_metni, 
-            content_type='text/markdown'
+            data=rapor_metni.encode('utf-8'), 
+            content_type='text/markdown; charset=utf-8' # <-- UTF-8 DÜZELTMESİ
         )
             
         print(f"Rapor başarıyla GCS'e yüklendi: {gcs_file_name}")
@@ -444,6 +441,4 @@ if __name__ == "__main__":
     print("uvicorn backend.main:app --reload")
 
 # --- FRONTEND VE RAPORLAR KLASÖRÜNÜ SUNMA (EN SON YÜKLENMELİ) ---
-# NOTE: /reports artık kullanılmayacak, frontend GCS linkini kullanacak.
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
-# app.mount("/reports", StaticFiles(directory="reports"), name="reports") # Artık GCS'e yönlendirileceği için buna gerek kalmadı
