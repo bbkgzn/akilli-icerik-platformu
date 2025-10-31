@@ -1,4 +1,4 @@
-# backend/schemas.py (V7 - Sadece User ve Token)
+# backend/schemas.py (V7 - Sadece User ve Token - DÜZELTİLMİŞ)
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
@@ -23,8 +23,9 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
-    is_active: bool = True
+    # is_active: bool = True # Bu satır V7'de kaldırılmıştı, temizlendi.
 
     # Rapor listesi (reports) V7'de kaldırıldı.
     class Config:
-        from_attributes = Truee
+        # CRITICAL FIX: 'Truee' -> 'True' olarak düzeltildi.
+        from_attributes = True
