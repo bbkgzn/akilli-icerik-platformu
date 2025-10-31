@@ -1,5 +1,5 @@
 #
-# Akıllı İçerik Platformu (Versiyon 4.1 - Final Bug Fixes)
+# Akıllı İçerik Platformu (Versiyon 4.1 / V5 Final - Hata Düzeltmeli)
 # Created by b!g
 #
 
@@ -63,9 +63,9 @@ except Exception as e:
     
 # --- FastAPI Sunucusunu Başlatma ---
 app = FastAPI(
-    title="Akıllı İçerik Platformu API (V3 Final)",
+    title="Akıllı İçerik Platformu API (V5 Final)",
     description="Çoklu ortam dosyalarını analiz edip kişiselleştirilmiş raporlar oluşturan platform.",
-    version="0.4.1" 
+    version="0.5.0" 
 )
 
 app.add_middleware(
@@ -98,9 +98,11 @@ async def get_current_user_from_token(
         )
     return user
 
-# --- AKILLI DOSYA OKUMA İŞLEVLERİ (CRITICAL FIX UYGULANDI) ---
+# --- AKILLI DOSYA OKUMA İŞLEVLERİ (V5 - file.seek(0) DÜZELTMELİ) ---
+
 def read_audio(file_data: UploadFile) -> str:
-    file_data.file.seek(0) # CRITICAL FIX
+    """Yüklenen ses dosyasından metni Whisper ile okur."""
+    file_data.file.seek(0) # CRITICAL FIX: Dosya işaretçisini başa al
     try:
         transcription = client.audio.transcriptions.create(
             model="whisper-1", 
@@ -111,7 +113,8 @@ def read_audio(file_data: UploadFile) -> str:
         raise HTTPException(status_code=500, detail=f"Whisper Okuma Hatası: {e}")
 
 def read_pdf(file_data: UploadFile) -> str:
-    file_data.file.seek(0) # CRITICAL FIX
+    """Yüklenen PDF dosyasından metni PyPDF2 ile okur."""
+    file_data.file.seek(0) # CRITICAL FIX: Dosya işaretçisini başa al
     full_text = []
     try:
         reader = PyPDF2.PdfReader(file_data.file)
@@ -124,7 +127,8 @@ def read_pdf(file_data: UploadFile) -> str:
         raise HTTPException(status_code=400, detail=f"PDF Okuma Hatası: Dosya bozuk veya şifreli olabilir. {e}")
 
 def read_docx(file_data: UploadFile) -> str:
-    file_data.file.seek(0) # CRITICAL FIX
+    """Yüklenen DOCX dosyasından metni python-docx ile okur."""
+    file_data.file.seek(0) # CRITICAL FIX: Dosya işaretçisini başa al
     full_text = []
     try:
         document = docx.Document(file_data.file)
@@ -136,7 +140,8 @@ def read_docx(file_data: UploadFile) -> str:
         raise HTTPException(status_code=400, detail=f"DOCX Okuma Hatası: {e}")
 
 def read_pptx(file_data: UploadFile) -> str:
-    file_data.file.seek(0) # CRITICAL FIX
+    """Yüklenen PPTX dosyasından metni python-pptx ile okur."""
+    file_data.file.seek(0) # CRITICAL FIX: Dosya işaretçisini başa al
     full_text = []
     try:
         presentation = pptx.Presentation(file_data.file)
@@ -156,7 +161,8 @@ def read_pptx(file_data: UploadFile) -> str:
         raise HTTPException(status_code=400, detail=f"PPTX Okuma Hatası: {e}")
 
 def read_image(file_data: UploadFile) -> str:
-    file_data.file.seek(0) # CRITICAL FIX
+    """Yüklenen görselden metni GPT-4o Vizyon ile okur (OCR)."""
+    file_data.file.seek(0) # CRITICAL FIX: Dosya işaretçisini başa al
     try:
         image_bytes = file_data.file.read()
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
@@ -172,6 +178,7 @@ def read_image(file_data: UploadFile) -> str:
         raise HTTPException(status_code=500, detail=f"Görsel (OCR) Okuma Hatası: {e}")
 
 def download_youtube_audio(url: str) -> str:
+    """YouTube URL'sinden sesi indirir ve Whisper ile metne çevirir."""
     temp_dir = "./temp"
     os.makedirs(temp_dir, exist_ok=True)
     temp_file_path = None
@@ -179,12 +186,15 @@ def download_youtube_audio(url: str) -> str:
         yt = pytube.YouTube(url)
         audio_stream = yt.streams.get_audio_only()
         temp_file_path = audio_stream.download(output_path=temp_dir, filename_prefix="yt_")
+        
         with open(temp_file_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
             return transcription.text
+            
     except pytube.exceptions.VideoUnavailable:
         raise HTTPException(status_code=400, detail="YouTube: Video erişilebilir değil veya silinmiş.")
     except Exception as e:
+        print(f"YouTube Ses İşleme Hatası: {e}")
         raise HTTPException(status_code=500, detail=f"YouTube/Whisper İşleme Hatası: {str(e)}")
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
@@ -232,7 +242,7 @@ Raporun formatı AŞAĞIDAKİ YAPILANDIRILMIŞ ŞEKİLDE, TÜM BAŞLIKLAR ZORUNL
 [Bu bölümü kullanıcı kendi notlarını alsın diye boş bırak. Sadece '### 8. Kişisel Notlar' başlığını yaz ve altını boş bırak.]
 """
 
-# --- YENİ KULLANICI VE OTURUM ENDPOINT'LERİ (Aynı) ---
+# --- KULLANICI VE OTURUM ENDPOINT'LERİ ---
 
 @app.post("/register", response_model=schemas.TokenResponse, tags=["Kimlik Doğrulama"])
 async def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -275,7 +285,7 @@ async def read_users_me(current_user: models.User = Depends(get_current_user_fro
     return current_user
 
 
-# --- YENİ RAPOR ENDPOINT'LERİ (Aynı) ---
+# --- RAPOR ENDPOINT'LERİ ---
 
 @app.get("/reports/my-reports", response_model=List[schemas.Report], tags=["Raporlama"])
 async def read_user_reports(
@@ -286,7 +296,7 @@ async def read_user_reports(
     return reports
 
 
-# --- ANA İŞLEM ENDPOINT'i (Aynı) ---
+# --- ANA İŞLEM ENDPOINT'i ---
 
 @app.post("/analiz-et", tags=["Raporlama"])
 async def analiz_et_ve_raporla(
@@ -331,9 +341,10 @@ async def analiz_et_ve_raporla(
             raise HTTPException(status_code=400, detail="Dosya yükleyin veya bir YouTube URL'si sağlayın.")
             
     except HTTPException as h:
-        raise h 
+        raise h # Bizim fırlattığımız hataları (örn: 400) doğrudan geri gönder
     except Exception as e:
         print(f"İçerik Okuma Başarısız: {e}")
+        # Bu, `pytube` veya `pdf` çökmesi gibi 500'lük bir hatadır
         raise HTTPException(status_code=500, detail=f"İçerik Okuma Başarısız oldu. {e}")
 
 

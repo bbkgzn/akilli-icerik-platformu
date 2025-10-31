@@ -1,4 +1,4 @@
-// frontend/script.js (V4 Final - Kesin Hata Gösterimi Düzeltmeli)
+// frontend/script.js (V5 Final - Kesin Hata Gösterimi Düzeltmeli)
 
 // --- 1. SABİT TANIMLAMALAR ---
 const API_BASE_URL = 'https://akilli-icerik-platformu.onrender.com';
@@ -14,24 +14,17 @@ const historySection = document.getElementById('history-section');
 const userInfo = document.getElementById('user-info');
 const userDisplayId = document.getElementById('user-display-id');
 const logoutButton = document.getElementById('logout-button');
-
-// Formlar
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginStatus = document.getElementById('login-status');
 const registerStatus = document.getElementById('register-status');
-// V4 YENİ: Analiz Hata Mesajı Elementi
 const analysisStatus = document.getElementById('analysis-status');
-
-// Analiz Elementleri
 const fileInput = document.getElementById('file-input');
 const youtubeUrlInput = document.getElementById('youtube-url-input');
 const analyzeButton = document.getElementById('analyze-button');
 const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const progressContainer = document.getElementById('progress-container');
-
-// Geçmiş Raporlar Elementleri
 const fetchHistoryButton = document.getElementById('fetch-history-button');
 const historyList = document.getElementById('history-list');
 
@@ -45,7 +38,10 @@ function showMessage(element, message, isError = false) {
     element.textContent = message;
     element.className = isError ? 'status-message status-error' : 'status-message status-success';
     element.style.display = 'block';
-    setTimeout(() => { element.style.display = 'none'; }, 5000);
+    // Hata mesajları artık otomatik gizlenmez, kullanıcı görene kadar kalır.
+    if (!isError) {
+        setTimeout(() => { element.style.display = 'none'; }, 5000);
+    }
 }
 
 function updateProgress(percentage, text) {
@@ -53,14 +49,12 @@ function updateProgress(percentage, text) {
     progressText.textContent = `Durum: ${text} (${percentage}%)`;
 }
 
-// V4 DÜZELTME: resetUI artık giriş alanlarını temizlemiyor, sadece süreci sıfırlıyor.
+// V5 DÜZELTME: resetUI artık sadece ilerleme çubuğunu ve butonu sıfırlar.
 function resetUI() {
-    reportSection.classList.add('hidden');
     progressContainer.classList.add('hidden');
     progressBar.style.width = '0%';
     progressText.textContent = 'Durum: Bekleniyor...';
     analyzeButton.disabled = false;
-    // Giriş alanları (fileInput, youtubeUrlInput) burada SIFIRLANMAZ.
 }
 
 // --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ ---
@@ -73,7 +67,7 @@ function saveTokenAndLogin(token, userIdStr) {
     historySection.classList.remove('hidden');
     userInfo.classList.remove('hidden');
     userDisplayId.textContent = userIdStr;
-    fetchHistory(); // Girişte geçmişi otomatik getir
+    fetchHistory();
 }
 
 function logout() {
@@ -180,7 +174,7 @@ loginForm.addEventListener('submit', async (e) => {
 });
 
 
-// --- 5. ANALİZ AKIŞI (V4 HATA GÖSTERİMİ DÜZELTMELİ) ---
+// --- 5. ANALİZ AKIŞI (V5 HATA GÖSTERİMİ DÜZELTMELİ) ---
 
 async function startAnalysis() {
     
@@ -190,12 +184,11 @@ async function startAnalysis() {
     
     // 2. Erken Çıkış Kontrolleri
     if (!currentToken) {
-        showMessage(loginStatus, 'Lütfen önce giriş yapın.', true); // Bu doğru, girişle ilgili
+        showMessage(loginStatus, 'Lütfen önce giriş yapın.', true);
         logout(); 
         return;
     }
     if (!file && !youtubeUrl) {
-        // V4 DÜZELTME: Hata mesajını AN ALİZ alanına gönder
         showMessage(analysisStatus, 'Lütfen bir dosya seçin veya YouTube URL’si girin.', true);
         return;
     }
@@ -203,7 +196,6 @@ async function startAnalysis() {
         showMessage(analysisStatus, 'Lütfen sadece BİR içerik kaynağı seçin (Dosya VEYA URL).', true);
         return;
     }
-    // Dosya Boyutu Kontrolü
     if (file && file.size > MAX_FILE_SIZE_BYTES) {
         const sizeInMB = (file.size / 1024 / 1024).toFixed(2);
         showMessage(analysisStatus, `HATA: Dosya boyutu 50MB'ı geçemez. Yüklenen dosya: ${sizeInMB} MB`, true);
@@ -218,7 +210,7 @@ async function startAnalysis() {
         formData.append('youtube_url', youtubeUrl);
     }
 
-    // 4. İlerlemeyi Başlat (Artık resetUI burada değil)
+    // 4. İlerlemeyi Başlat
     analyzeButton.disabled = true;
     progressContainer.classList.remove('hidden');
     updateProgress(5, 'Yükleniyor...');
@@ -249,17 +241,21 @@ async function startAnalysis() {
                 showMessage(loginStatus, `Oturumunuz zaman aşımına uğradı. Lütfen tekrar giriş yapın.`, true);
                 logout();
             } else {
-                // V4 DÜZELTME: HATAYI DOĞRU YERDE GÖSTER
+                // V5 DÜZELTME: HATAYI GÖSTER VE resetUI() ÇAĞIRMA!
                 showMessage(analysisStatus, `API Hatası (${response.status}): ${data.detail || 'Bilinmeyen Hata'}`, true);
-                resetUI(); // Sadece hata durumunda UI'yı sıfırla
+                // resetUI(); // HATA BURADAYDI, KALDIRILDI.
+                analyzeButton.disabled = false; // Sadece butonu tekrar aktif et
+                progressContainer.classList.add('hidden'); // İlerleme çubuğunu gizle
             }
         }
 
     } catch (error) {
-        // V4 DÜZELTME: AĞ HATASINI DOĞRU YERDE GÖSTER
+        // V5 DÜZELTME: AĞ HATASINI GÖSTER VE resetUI() ÇAĞIRMA!
         showMessage(analysisStatus, `Ağ Hatası: Sunucuya ulaşılamadı.`, true);
         console.error('Analiz Ağı Hatası:', error);
-        resetUI(); // Hata durumunda UI'yı sıfırla
+        // resetUI(); // HATA BURADAYDI, KALDIRILDI.
+        analyzeButton.disabled = false; // Sadece butonu tekrar aktif et
+        progressContainer.classList.add('hidden'); // İlerleme çubuğunu gizle
     }
 }
 
