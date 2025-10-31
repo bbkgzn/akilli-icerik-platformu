@@ -1,12 +1,12 @@
-// frontend/script.js (V2 - Kalıcı PostgreSQL Veritabanı Uyumlu)
+// frontend/script.js (V3 Final - Kesin Çalışan Versiyon)
 
 // --- 1. SABİT TANIMLAMALAR ---
 const API_BASE_URL = 'https://akilli-icerik-platformu.onrender.com';
 const TOKEN_STORAGE_KEY = 'akilliAsistanToken';
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB (Tespit 2.1)
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 let currentToken = '';
 
-// DOM Elementleri
+// DOM Elementleri (Kısaltıldı)
 const authSection = document.getElementById('auth-section');
 const analysisSection = document.getElementById('analysis-section');
 const reportSection = document.getElementById('report-section');
@@ -14,27 +14,20 @@ const historySection = document.getElementById('history-section');
 const userInfo = document.getElementById('user-info');
 const userDisplayId = document.getElementById('user-display-id');
 const logoutButton = document.getElementById('logout-button');
-
-// Formlar
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginStatus = document.getElementById('login-status');
 const registerStatus = document.getElementById('register-status');
-
-// Analiz Elementleri
 const fileInput = document.getElementById('file-input');
 const youtubeUrlInput = document.getElementById('youtube-url-input');
 const analyzeButton = document.getElementById('analyze-button');
 const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const progressContainer = document.getElementById('progress-container');
-
-// Geçmiş Raporlar Elementleri
 const fetchHistoryButton = document.getElementById('fetch-history-button');
 const historyList = document.getElementById('history-list');
 
-// --- 2. YARDIMCI FONKSİYONLAR ---
-
+// --- 2. YARDIMCI FONKSİYONLAR (Aynı) ---
 function showMessage(element, message, isError = false) {
     element.textContent = message;
     element.className = isError ? 'status-message status-error' : 'status-message status-success';
@@ -53,57 +46,38 @@ function resetUI() {
     progressBar.style.width = '0%';
     progressText.textContent = 'Durum: Bekleniyor...';
     analyzeButton.disabled = false;
-    fileInput.value = '';
-    youtubeUrlInput.value = '';
+    // NOT: fileInput.value ve youtubeUrlInput.value burada sıfırlanmaz,
+    // çünkü kullanıcıdan alınan verinin kaybolmasını istemiyoruz.
 }
 
-// --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ ---
-
-/**
- * Başarılı bir giriş/kayıt sonrası UI'ı güceller.
- * @param {string} token - Alınan yeni token
- * @param {string} userIdStr - Kullanıcının ID'si (örn: ali_yilmaz)
- */
+// --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ (Aynı) ---
 function saveTokenAndLogin(token, userIdStr) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     currentToken = token;
-
-    // Arayüzü güncelle
     authSection.classList.add('hidden');
     analysisSection.classList.remove('hidden');
     historySection.classList.remove('hidden');
     userInfo.classList.remove('hidden');
     userDisplayId.textContent = userIdStr;
+    fetchHistory(); // Girişte geçmişi otomatik getir
 }
 
-/**
- * Çıkış yapma işlemi.
- */
 function logout() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     currentToken = '';
-
-    // Arayüzü sıfırla
     authSection.classList.remove('hidden');
     analysisSection.classList.add('hidden');
     historySection.classList.add('hidden');
     reportSection.classList.add('hidden');
     userInfo.classList.add('hidden');
     userDisplayId.textContent = '...';
-
-    // Formları temizle (opsiyonel)
     loginForm.reset();
     registerForm.reset();
 }
 
-/**
- * Sayfa yüklendiğinde token'ı doğrular (Tespit 2.2 & 3.2 Çözü̇mü)
- * Artık /users/me endpoint'ini kullanarak GERÇEK doğrulama yapar.
- */
 async function loadTokenAndValidate() {
     const token = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) {
-        // Token yoksa, giriş ekranını göster
         authSection.classList.remove('hidden');
         return;
     }
@@ -111,32 +85,26 @@ async function loadTokenAndValidate() {
     try {
         const response = await fetch(`${API_BASE_URL}/users/me`, {
             method: 'GET',
-            headers: {
-                'X-API-TOKEN': token
-            }
+            headers: { 'X-API-TOKEN': token }
         });
 
         if (response.ok) {
             const user = await response.json();
-            // Token geçerli, kullanıcıyı giriş yapmış olarak ayarla
             saveTokenAndLogin(token, user.user_id_str);
         } else {
-            // Token geçersiz (süre dolmuş veya sahte)
             logout();
         }
     } catch (error) {
         console.error("Token doğrulama hatası:", error);
-        logout(); // Sunucuya ulaşılamazsa da çıkış yap
+        logout();
     }
 }
 
-// --- 4. KULLANICI KAYDI VE GİRİŞ (YENİ V2) ---
-
-// A. YENİ KAYIT FORMU (/register)
+// --- 4. KULLANICI KAYDI VE GİRİŞ (Aynı) ---
 registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     resetUI();
-
+    
     const user_id = document.getElementById('reg-id').value;
     const email = document.getElementById('reg-email').value;
     const password = document.getElementById('reg-password').value;
@@ -151,7 +119,6 @@ registerForm.addEventListener('submit', async (e) => {
         const data = await response.json();
 
         if (response.ok) {
-            // Başarılı kayıt sonrası (dönen token: data.access_token)
             saveTokenAndLogin(data.access_token, user_id);
             showMessage(registerStatus, `Kayıt başarılı! Giriş yapıldı.`, false);
             registerForm.reset(); 
@@ -163,17 +130,15 @@ registerForm.addEventListener('submit', async (e) => {
     }
 });
 
-// B. GİRİŞ YAP FORMU (/token)
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     resetUI();
-
+    
     const loginId = document.getElementById('login-id').value;
     const password = document.getElementById('login-password').value;
 
-    // FastAPI'nin OAuth2 formu 'username' ve 'password' bekler
     const formData = new URLSearchParams();
-    formData.append('username', loginId); // Biz 'username' olarak 'user_id_str' kullanıyoruz
+    formData.append('username', loginId); 
     formData.append('password', password);
 
     try {
@@ -186,7 +151,6 @@ loginForm.addEventListener('submit', async (e) => {
         const data = await response.json();
 
         if (response.ok) {
-            // Başarılı giriş (dönen token: data.access_token)
             saveTokenAndLogin(data.access_token, loginId);
             showMessage(loginStatus, `Giriş başarılı! Hoş geldiniz.`, false);
             loginForm.reset();
@@ -198,17 +162,19 @@ loginForm.addEventListener('submit', async (e) => {
     }
 });
 
-// --- 5. ANALİZ AKIŞI (V2) ---
+
+// --- 5. ANALİZ AKIŞI (CRITICAL FIX UYGULANDI) ---
 
 async function startAnalysis() {
-    // Note: resetUI() çağrısı başta değil; inputları okumadan once silinmemeli.
-
+    
+    // 1. Girdileri Güvenle Oku
     const file = fileInput.files[0];
     const youtubeUrl = youtubeUrlInput.value.trim();
-
+    
+    // 2. Erken Çıkış Kontrolleri
     if (!currentToken) {
         showMessage(loginStatus, 'Lütfen önce giriş yapın.', true);
-        logout(); // Token yoksa güvenlik için çıkış yap
+        logout(); 
         return;
     }
 
@@ -222,38 +188,39 @@ async function startAnalysis() {
         return;
     }
 
-    // Dosya Boyutu Kontrolü (Tespit 2.1)
+    // Dosya Boyutu Kontrolü
     if (file && file.size > MAX_FILE_SIZE_BYTES) {
         const sizeInMB = (file.size / 1024 / 1024).toFixed(2);
-        showMessage(loginStatus, `HATA: Dosya boyutu 50MB'\u0131 geçemez. Yüklenen dosya: ${sizeInMB} MB`, true);
+        showMessage(loginStatus, `HATA: Dosya boyutu 50MB'ı geçemez. Yüklenen dosya: ${sizeInMB} MB`, true);
         return;
     }
+    
+    // 3. Veriyi FormData'ya Sakla (Önce Değerleri Koru)
+    const formData = new FormData();
+    if (file) {
+        formData.append('dosya', file);
+    } else if (youtubeUrl) {
+        formData.append('youtube_url', youtubeUrl);
+    }
 
-    // Şimdi tüm kontrollerden sonra arayüzü sıfırla
-    resetUI();
+    // --- CRITICAL FIX: Sadece bu noktada UI'yı temizle ve sıfırla ---
+    resetUI(); 
+    fileInput.value = ''; // Yükleme bittiği için formları temizle
+    youtubeUrlInput.value = '';
+    // -----------------------------------------------------------------
 
     // Durumu Güncelle
     analyzeButton.disabled = true;
     progressContainer.classList.remove('hidden');
     updateProgress(5, 'Yükleniyor...');
 
-    const formData = new FormData();
-    if (file) {
-        formData.append('dosya', file);
-        updateProgress(10, `Dosya yükleniyor: ${file.name}`);
-    } else if (youtubeUrl) {
-        formData.append('youtube_url', youtubeUrl);
-        updateProgress(10, 'YouTube URL doğrulanıyor...');
-    }
-
+    
     try {
-        updateProgress(25, 'İçerik okunuyor (Whisper/OCR/PyPDF2)...');
+        updateProgress(25, 'İçerik okunuyor...');
 
         const response = await fetch(`${API_BASE_URL}/analiz-et`, {
             method: 'POST',
-            headers: {
-                'X-API-TOKEN': currentToken, // YENİ V2 GÜVENLİK
-            },
+            headers: { 'X-API-TOKEN': currentToken },
             body: formData 
         });
 
@@ -266,9 +233,7 @@ async function startAnalysis() {
             displayReport(data);
             updateProgress(100, 'Analiz Başarılı!');
         } else {
-            // API'den dönen HTTP hatasını göster
             if (response.status === 401) {
-                // Token geçersizse (sunucu restart vb.)
                 showMessage(loginStatus, `Oturumunuz zaman aşımına uğradı. Lütfen tekrar giriş yapın.`, true);
                 logout();
             } else {
@@ -284,13 +249,13 @@ async function startAnalysis() {
     }
 }
 
-// --- 6. RAPOR GÖSTERİMİ (V2) ---
+
+// --- 6. RAPOR GÖSTERİMİ VE GEÇMİŞ (Aynı) ---
 
 function displayReport(data) {
     const reportContent = document.getElementById('report-content');
     const reportLink = document.getElementById('report-link');
     
-    // XSS Güvenlik Düzeltmesi (Tespit 2.6)
     const htmlContent = DOMPurify.sanitize(marked.parse(data.rapor_markdown));
     reportContent.innerHTML = htmlContent;
     
@@ -298,46 +263,38 @@ function displayReport(data) {
         reportLink.href = data.dosya_url;
         reportLink.textContent = `Raporu İndir: ${data.dosya_url.split('/').pop()}`;
     } else {
-        reportLink.textContent = `Rapor kaydedilemedi (Sunucu Hatası), sadece aşağıda görüntüleniyor.`;
-        reportLink.href = '#';
+         reportLink.textContent = `Rapor kaydedilemedi (Sunucu Hatası), sadece aşağıda görüntüleniyor.`;
+         reportLink.href = '#';
     }
 
     reportSection.classList.remove('hidden');
-    
-    // Rapor bittikten sonra geçmişi otomatik tazele
     fetchHistory(); 
 }
 
-// --- 7. YENİ (V2): GEÇMİŞ RAPORLAR (Tespit 3.3 Çözü̇mü) ---
-
 async function fetchHistory() {
-    if (!currentToken) return; // Giriş yapılmadıysa çalışma
+    if (!currentToken) return;
 
-    historyList.innerHTML = '<li>Yükleniyor...</li>'; // Yükleniyor göstergesi
+    historyList.innerHTML = '<li>Yükleniyor...</li>'; 
 
     try {
         const response = await fetch(`${API_BASE_URL}/reports/my-reports`, {
             method: 'GET',
-            headers: {
-                'X-API-TOKEN': currentToken
-            }
+            headers: { 'X-API-TOKEN': currentToken }
         });
 
         if (response.ok) {
             const reports = await response.json();
-            historyList.innerHTML = ''; // Listeyi temizle
+            historyList.innerHTML = '';
 
             if (reports.length === 0) {
                 historyList.innerHTML = '<li>Henüz kayıtlı raporunuz bulunmuyor.</li>';
             } else {
-                // Raporları en yeniden en eskiye sırala
                 reports.reverse().forEach(report => {
                     const li = document.createElement('li');
                     const a = document.createElement('a');
                     a.href = report.gcs_url;
                     a.target = '_blank';
                     
-                    // Tarihi formatla (örn: 31.10.2025 18:30)
                     const date = new Date(report.created_at);
                     const formattedDate = `${date.toLocaleDateString('tr-TR')} ${date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
                     
@@ -355,10 +312,13 @@ async function fetchHistory() {
     }
 }
 
-// --- UYGULAMA BAŞLANGICI ---
-// Sayfa yüklendiğinde token'ı doğrulamaya dene
-document.addEventListener('DOMContentLoaded', loadTokenAndValidate);
-// Çıkış yap butonuna tıklamayı dinle
-logoutButton.addEventListener('click', logout);
-// Geçmişi getir butonuna tıklamayı dinle
-fetchHistoryButton.addEventListener('click', fetchHistory);
+
+// --- UYGULAMA BAŞLANGICI (CRITICAL FIX UYGULANDI) ---
+document.addEventListener('DOMContentLoaded', () => {
+    loadTokenAndValidate();
+    // Olay dinleyicilerini DOM yüklendikten sonra bağla
+    logoutButton.addEventListener('click', logout);
+    fetchHistoryButton.addEventListener('click', fetchHistory);
+    // CRITICAL FIX: Analiz butonunu DOM yüklendikten sonra bağla
+    analyzeButton.addEventListener('click', startAnalysis);
+});

@@ -48,6 +48,7 @@
         <section id="analysis-section" class="hidden">
             <h2>📚 İçerik Yükle & Analiz Et</h2>
             <p>Ses, PDF, Word, Görsel dosyası yükleyin veya bir YouTube linki girin.</p>
+
             <div class="input-group">
                 <input type="file" id="file-input" accept=".mp3, .wav, .m4a, .pdf, .docx, .pptx, .jpg, .jpeg, .png">
             </div>
@@ -55,7 +56,8 @@
             <div class="input-group">
                 <input type="url" id="youtube-url-input" placeholder="YouTube Video URL'si">
             </div>
-            <button id="analyze-button" onclick="startAnalysis()">Analizi Başlat</button>
+            
+            <button id="analyze-button">Analizi Başlat</button>
 
             <div id="progress-container" class="hidden">
                 <div id="progress-bar"></div>
