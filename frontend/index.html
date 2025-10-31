@@ -45,17 +45,13 @@
         </section>
 
         <section id="analysis-section" class="hidden">
-            <h2>📚 İçerik Yükle & Analiz Et</h2>
-            <p>Ses, PDF, Word, Görsel dosyası yükleyin veya bir YouTube linki girin.</p>
+            <h2>📚 Ses Dosyası Yükle & Analiz Et</h2>
+            <p>Lütfen analiz etmek için bir .mp3, .wav veya .m4a dosyası yükleyin.</p>
 
             <div class="input-group">
-                <input type="file" id="file-input" accept=".mp3, .wav, .m4a, .pdf, .docx, .pptx, .jpg, .jpeg, .png">
+                <input type="file" id="file-input" accept=".mp3, .wav, .m4a">
             </div>
-            <div class="or-separator">VEYA</div>
-            <div class="input-group">
-                <input type="url" id="youtube-url-input" placeholder="YouTube Video URL'si">
-            </div>
-            
+
             <button id="analyze-button">Analizi Başlat</button>
 
             <p id="analysis-status" class="status-message"></p>
@@ -69,19 +65,13 @@
         <section id="report-section" class="hidden">
             <h2>✅ Analiz Raporu</h2>
             <div class="report-header">
-                <p>Raporunuz kaydedildi: <a id="report-link" href="#" target="_blank">Dosyayı Görüntüle / İndir</a></p>
+                <p>Raporunuz başarıyla oluşturuldu.</p>
             </div>
             <div id="report-content" class="markdown-body"></div>
             <button onclick="window.print()">Sayfayı Yazdır (PDF Olarak Kaydet)</button>
         </section>
 
-        <section id="history-section" class="hidden">
-            <h2>🗂️ Geçmiş Raporlarım</h2>
-            <button id="fetch-history-button">Raporlarımı Getir</button>
-            <ul id="history-list">
-                </ul>
-        </section>
-    </main>
+        </main>
     <footer>
         <p>© 2025 Akıllı İçerik Platformu. Tüm hakları saklıdır.</p>
     </footer>
