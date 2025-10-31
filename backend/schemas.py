@@ -1,3 +1,4 @@
+# backend/schemas.py (V7 - Sadece User ve Token)
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
@@ -10,20 +11,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
-# --- Rapor Şemaları ---
-class ReportBase(BaseModel):
-    gcs_url: str
-    file_name: str | None = None
-
-class ReportCreate(ReportBase):
-    pass
-
-class Report(ReportBase):
-    id: int
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True # SQLAlchemy modelleri ile Pydantic'i eşleştirir
+# --- Rapor Şemaları V7'de kaldırıldı ---
 
 # --- Kullanıcı Şemaları ---
 class UserBase(BaseModel):
@@ -35,8 +23,8 @@ class UserCreate(UserBase):
 
 class User(UserBase):
     id: int
-    is_active: bool = True # Gelecekte kullanıcı banlama vb. için
-    reports: List[Report] = []
+    is_active: bool = True
 
+    # Rapor listesi (reports) V7'de kaldırıldı.
     class Config:
-        from_attributes = True
+        from_attributes = Truee
