@@ -1,5 +1,5 @@
 #
-# Akıllı İçerik Platformu (Versiyon 4.1 / V5 Final - Hata Düzeltmeli)
+# Akıllı İçerik Platformu (Versiyon 5.0 Final - Hata Düzeltmeli)
 # Created by b!g
 #
 
@@ -345,7 +345,7 @@ async def analiz_et_ve_raporla(
     except Exception as e:
         print(f"İçerik Okuma Başarısız: {e}")
         # Bu, `pytube` veya `pdf` çökmesi gibi 500'lük bir hatadır
-        raise HTTPException(status_code=500, detail=f"İçerik Okuma Başarısız oldu. {e}")
+        raise HTTPException(status_code=500, detail=f"İçerik Okuma Başarısız oldu: {e}")
 
 
     if not metin or metin.strip() == "":

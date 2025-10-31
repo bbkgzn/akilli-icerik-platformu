@@ -18,6 +18,7 @@ const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginStatus = document.getElementById('login-status');
 const registerStatus = document.getElementById('register-status');
+// V5 CRITICAL FIX: Analiz Hata Mesajı Elementi
 const analysisStatus = document.getElementById('analysis-status');
 const fileInput = document.getElementById('file-input');
 const youtubeUrlInput = document.getElementById('youtube-url-input');
@@ -55,6 +56,7 @@ function resetUI() {
     progressBar.style.width = '0%';
     progressText.textContent = 'Durum: Bekleniyor...';
     analyzeButton.disabled = false;
+    reportSection.classList.add('hidden'); // Raporu da gizle
 }
 
 // --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ ---
@@ -178,6 +180,10 @@ loginForm.addEventListener('submit', async (e) => {
 
 async function startAnalysis() {
     
+    // 0. Hata mesajını temizle ve UI'yı sıfırla
+    analysisStatus.style.display = 'none';
+    resetUI();
+
     // 1. Girdileri Güvenle Oku
     const file = fileInput.files[0];
     const youtubeUrl = youtubeUrlInput.value.trim();
@@ -214,8 +220,6 @@ async function startAnalysis() {
     analyzeButton.disabled = true;
     progressContainer.classList.remove('hidden');
     updateProgress(5, 'Yükleniyor...');
-    analysisStatus.style.display = 'none'; // Eski hataları temizle
-
     
     try {
         updateProgress(25, 'İçerik okunuyor...');
@@ -234,28 +238,26 @@ async function startAnalysis() {
             updateProgress(90, 'Rapor buluta ve veritabanına kaydediliyor...');
             displayReport(data); // Başarılı, raporu göster
             updateProgress(100, 'Analiz Başarılı!');
-            resetUI(); // Sadece BAŞARI durumunda süreci sıfırla
+            analyzeButton.disabled = false; // Butonu tekrar aktif et
         } else {
             // API'den dönen HTTP hatasını göster
             if (response.status === 401) {
                 showMessage(loginStatus, `Oturumunuz zaman aşımına uğradı. Lütfen tekrar giriş yapın.`, true);
                 logout();
             } else {
-                // V5 DÜZELTME: HATAYI GÖSTER VE resetUI() ÇAĞIRMA!
+                // V5 DÜZELTME: HATAYI GÖSTER VE UI'YI SIFIRLAMA (Hata ekranda kalmalı)
                 showMessage(analysisStatus, `API Hatası (${response.status}): ${data.detail || 'Bilinmeyen Hata'}`, true);
-                // resetUI(); // HATA BURADAYDI, KALDIRILDI.
-                analyzeButton.disabled = false; // Sadece butonu tekrar aktif et
-                progressContainer.classList.add('hidden'); // İlerleme çubuğunu gizle
+                analyzeButton.disabled = false;
+                progressContainer.classList.add('hidden');
             }
         }
 
     } catch (error) {
-        // V5 DÜZELTME: AĞ HATASINI GÖSTER VE resetUI() ÇAĞIRMA!
+        // V5 DÜZELTME: AĞ HATASINI GÖSTER VE UI'YI SIFIRLAMA
         showMessage(analysisStatus, `Ağ Hatası: Sunucuya ulaşılamadı.`, true);
         console.error('Analiz Ağı Hatası:', error);
-        // resetUI(); // HATA BURADAYDI, KALDIRILDI.
-        analyzeButton.disabled = false; // Sadece butonu tekrar aktif et
-        progressContainer.classList.add('hidden'); // İlerleme çubuğunu gizle
+        analyzeButton.disabled = false;
+        progressContainer.classList.add('hidden');
     }
 }
 
@@ -279,7 +281,7 @@ function displayReport(data) {
 
     reportSection.classList.remove('hidden');
     
-    // V4 DÜZELTME: Sadece BAŞARILI analizden sonra formları temizle
+    // Başarılı analizden sonra formları temizle
     fileInput.value = '';
     youtubeUrlInput.value = '';
     
