@@ -11,3 +11,7 @@ python-pptx
 pytube
 google-cloud-storage
 passlib[bcrypt]
+
+# --- YENI V2 VERITABANI KUTUPHANELERI ---
+sqlalchemy
+psycopg2-binary
