@@ -1,26 +1,27 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func
+# backend/models.py (V7 - Sadece User ve Token)
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
-from .database import Base # Az önce oluşturduğumuz database.py'den Base'i al
+from .database import Base # database.py'den Base'i al
 
 class User(Base):
     """
-    Kalıcı Kullanıcı tablosu. USERS_DB sözlüğünün yerini alır.
+    Kalıcı Kullanıcı tablosu.
     """
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id_str = Column(String, unique=True, index=True, nullable=False) # Bu, 'ali_yilmaz' gibi bir ID
+    user_id_str = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
 
-    # Bir kullanıcının birden fazla token'ı ve raporu olabilir
+    # Bir kullanıcının birden fazla token'ı olabilir
+    # Rapor ilişkisi (reports) V7'de kaldırıldı.
     tokens = relationship("Token", back_populates="owner")
-    reports = relationship("Report", back_populates="owner")
 
 
 class Token(Base):
     """
-    Kalıcı Token tablosu. Artık restart'ta silinmeyecekler.
+    Kalıcı Token tablosu.
     """
     __tablename__ = "tokens"
     
@@ -30,18 +31,4 @@ class Token(Base):
 
     owner = relationship("User", back_populates="tokens")
 
-
-class Report(Base):
-    """
-    Kalıcı Rapor tablosu (Tespit 3.3'ü çözer).
-    Kullanıcının geçmiş raporlarını listelememizi sağlar.
-    """
-    __tablename__ = "reports"
-
-    id = Column(Integer, primary_key=True, index=True)
-    gcs_url = Column(String, nullable=False) # Raporun GCS'deki kalıcı linki
-    file_name = Column(String) # Raporun adı
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    user_id = Column(Integer, ForeignKey("users.id")) # User tablosuna bağla
-
-    owner = relationship("User", back_populates="reports")
+# --- Report (Rapor) modeli V7'de kaldırıldı ---
