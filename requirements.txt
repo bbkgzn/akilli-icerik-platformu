@@ -3,6 +3,7 @@ uvicorn[standard]
 python-dotenv
 openai
 pydantic[email]
+python-multipart
 slugify
 PyPDF2
 python-docx
