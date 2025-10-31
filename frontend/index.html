@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="styles.css">
     
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> 
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 </head>
 <body>
@@ -35,7 +34,7 @@
                 <div class="auth-box">
                     <h2>📝 Yeni Kullanıcı Kaydı</h2>
                     <form id="register-form">
-                        <input type="text" id="reg-id" placeholder="Kullanıcı ID (Örn: yeni_kullanici)" required>
+                        <input type="text" id="reg-id" placeholder="Kullanıcı ID" required>
                         <input type="email" id="reg-email" placeholder="E-posta" required>
                         <input type="password" id="reg-password" placeholder="Şifre" required>
                         <button type="submit">Kayıt Ol</button>
@@ -58,6 +57,8 @@
             </div>
             
             <button id="analyze-button">Analizi Başlat</button>
+
+            <p id="analysis-status" class="status-message"></p>
 
             <div id="progress-container" class="hidden">
                 <div id="progress-bar"></div>

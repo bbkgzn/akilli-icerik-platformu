@@ -1,4 +1,4 @@
-// frontend/script.js (V3 Final - Kesin Çalışan Versiyon)
+// frontend/script.js (V4 Final - Kesin Hata Gösterimi Düzeltmeli)
 
 // --- 1. SABİT TANIMLAMALAR ---
 const API_BASE_URL = 'https://akilli-icerik-platformu.onrender.com';
@@ -6,7 +6,7 @@ const TOKEN_STORAGE_KEY = 'akilliAsistanToken';
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 let currentToken = '';
 
-// DOM Elementleri (Kısaltıldı)
+// DOM Elementleri
 const authSection = document.getElementById('auth-section');
 const analysisSection = document.getElementById('analysis-section');
 const reportSection = document.getElementById('report-section');
@@ -14,21 +14,34 @@ const historySection = document.getElementById('history-section');
 const userInfo = document.getElementById('user-info');
 const userDisplayId = document.getElementById('user-display-id');
 const logoutButton = document.getElementById('logout-button');
+
+// Formlar
 const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginStatus = document.getElementById('login-status');
 const registerStatus = document.getElementById('register-status');
+// V4 YENİ: Analiz Hata Mesajı Elementi
+const analysisStatus = document.getElementById('analysis-status');
+
+// Analiz Elementleri
 const fileInput = document.getElementById('file-input');
 const youtubeUrlInput = document.getElementById('youtube-url-input');
 const analyzeButton = document.getElementById('analyze-button');
 const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const progressContainer = document.getElementById('progress-container');
+
+// Geçmiş Raporlar Elementleri
 const fetchHistoryButton = document.getElementById('fetch-history-button');
 const historyList = document.getElementById('history-list');
 
-// --- 2. YARDIMCI FONKSİYONLAR (Aynı) ---
+// --- 2. YARDIMCI FONKSİYONLAR ---
+
 function showMessage(element, message, isError = false) {
+    if (!element) {
+        console.error("Hata: Mesaj elementi bulunamadı.", message);
+        return;
+    }
     element.textContent = message;
     element.className = isError ? 'status-message status-error' : 'status-message status-success';
     element.style.display = 'block';
@@ -40,20 +53,21 @@ function updateProgress(percentage, text) {
     progressText.textContent = `Durum: ${text} (${percentage}%)`;
 }
 
+// V4 DÜZELTME: resetUI artık giriş alanlarını temizlemiyor, sadece süreci sıfırlıyor.
 function resetUI() {
     reportSection.classList.add('hidden');
     progressContainer.classList.add('hidden');
     progressBar.style.width = '0%';
     progressText.textContent = 'Durum: Bekleniyor...';
     analyzeButton.disabled = false;
-    // NOT: fileInput.value ve youtubeUrlInput.value burada sıfırlanmaz,
-    // çünkü kullanıcıdan alınan verinin kaybolmasını istemiyoruz.
+    // Giriş alanları (fileInput, youtubeUrlInput) burada SIFIRLANMAZ.
 }
 
-// --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ (Aynı) ---
+// --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ ---
 function saveTokenAndLogin(token, userIdStr) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     currentToken = token;
+    
     authSection.classList.add('hidden');
     analysisSection.classList.remove('hidden');
     historySection.classList.remove('hidden');
@@ -65,12 +79,14 @@ function saveTokenAndLogin(token, userIdStr) {
 function logout() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     currentToken = '';
+    
     authSection.classList.remove('hidden');
     analysisSection.classList.add('hidden');
     historySection.classList.add('hidden');
     reportSection.classList.add('hidden');
     userInfo.classList.add('hidden');
     userDisplayId.textContent = '...';
+    
     loginForm.reset();
     registerForm.reset();
 }
@@ -100,7 +116,8 @@ async function loadTokenAndValidate() {
     }
 }
 
-// --- 4. KULLANICI KAYDI VE GİRİŞ (Aynı) ---
+// --- 4. KULLANICI KAYDI VE GİRİŞ ---
+
 registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     resetUI();
@@ -163,7 +180,7 @@ loginForm.addEventListener('submit', async (e) => {
 });
 
 
-// --- 5. ANALİZ AKIŞI (CRITICAL FIX UYGULANDI) ---
+// --- 5. ANALİZ AKIŞI (V4 HATA GÖSTERİMİ DÜZELTMELİ) ---
 
 async function startAnalysis() {
     
@@ -173,29 +190,27 @@ async function startAnalysis() {
     
     // 2. Erken Çıkış Kontrolleri
     if (!currentToken) {
-        showMessage(loginStatus, 'Lütfen önce giriş yapın.', true);
+        showMessage(loginStatus, 'Lütfen önce giriş yapın.', true); // Bu doğru, girişle ilgili
         logout(); 
         return;
     }
-
     if (!file && !youtubeUrl) {
-        showMessage(loginStatus, 'Lütfen bir dosya seçin veya YouTube URL’si girin.', true);
+        // V4 DÜZELTME: Hata mesajını AN ALİZ alanına gönder
+        showMessage(analysisStatus, 'Lütfen bir dosya seçin veya YouTube URL’si girin.', true);
         return;
     }
-
     if (file && youtubeUrl) {
-        showMessage(loginStatus, 'Lütfen sadece BİR içerik kaynağı seçin (Dosya VEYA URL).', true);
+        showMessage(analysisStatus, 'Lütfen sadece BİR içerik kaynağı seçin (Dosya VEYA URL).', true);
         return;
     }
-
     // Dosya Boyutu Kontrolü
     if (file && file.size > MAX_FILE_SIZE_BYTES) {
         const sizeInMB = (file.size / 1024 / 1024).toFixed(2);
-        showMessage(loginStatus, `HATA: Dosya boyutu 50MB'ı geçemez. Yüklenen dosya: ${sizeInMB} MB`, true);
+        showMessage(analysisStatus, `HATA: Dosya boyutu 50MB'ı geçemez. Yüklenen dosya: ${sizeInMB} MB`, true);
         return;
     }
     
-    // 3. Veriyi FormData'ya Sakla (Önce Değerleri Koru)
+    // 3. Veriyi FormData'ya Sakla
     const formData = new FormData();
     if (file) {
         formData.append('dosya', file);
@@ -203,16 +218,11 @@ async function startAnalysis() {
         formData.append('youtube_url', youtubeUrl);
     }
 
-    // --- CRITICAL FIX: Sadece bu noktada UI'yı temizle ve sıfırla ---
-    resetUI(); 
-    fileInput.value = ''; // Yükleme bittiği için formları temizle
-    youtubeUrlInput.value = '';
-    // -----------------------------------------------------------------
-
-    // Durumu Güncelle
+    // 4. İlerlemeyi Başlat (Artık resetUI burada değil)
     analyzeButton.disabled = true;
     progressContainer.classList.remove('hidden');
     updateProgress(5, 'Yükleniyor...');
+    analysisStatus.style.display = 'none'; // Eski hataları temizle
 
     
     try {
@@ -230,27 +240,31 @@ async function startAnalysis() {
 
         if (response.ok) {
             updateProgress(90, 'Rapor buluta ve veritabanına kaydediliyor...');
-            displayReport(data);
+            displayReport(data); // Başarılı, raporu göster
             updateProgress(100, 'Analiz Başarılı!');
+            resetUI(); // Sadece BAŞARI durumunda süreci sıfırla
         } else {
+            // API'den dönen HTTP hatasını göster
             if (response.status === 401) {
                 showMessage(loginStatus, `Oturumunuz zaman aşımına uğradı. Lütfen tekrar giriş yapın.`, true);
                 logout();
             } else {
-                showMessage(loginStatus, `API Hatası (${response.status}): ${data.detail || 'Bilinmeyen Hata'}`, true);
-                resetUI();
+                // V4 DÜZELTME: HATAYI DOĞRU YERDE GÖSTER
+                showMessage(analysisStatus, `API Hatası (${response.status}): ${data.detail || 'Bilinmeyen Hata'}`, true);
+                resetUI(); // Sadece hata durumunda UI'yı sıfırla
             }
         }
 
     } catch (error) {
-        showMessage(loginStatus, `Ağ Hatası: Sunucuya ulaşılamadı.`, true);
+        // V4 DÜZELTME: AĞ HATASINI DOĞRU YERDE GÖSTER
+        showMessage(analysisStatus, `Ağ Hatası: Sunucuya ulaşılamadı.`, true);
         console.error('Analiz Ağı Hatası:', error);
-        resetUI();
+        resetUI(); // Hata durumunda UI'yı sıfırla
     }
 }
 
 
-// --- 6. RAPOR GÖSTERİMİ VE GEÇMİŞ (Aynı) ---
+// --- 6. RAPOR GÖSTERİMİ VE GEÇMİŞ ---
 
 function displayReport(data) {
     const reportContent = document.getElementById('report-content');
@@ -263,11 +277,16 @@ function displayReport(data) {
         reportLink.href = data.dosya_url;
         reportLink.textContent = `Raporu İndir: ${data.dosya_url.split('/').pop()}`;
     } else {
-         reportLink.textContent = `Rapor kaydedilemedi (Sunucu Hatası), sadece aşağıda görüntüleniyor.`;
+         reportLink.textContent = `Rapor kaydedilemedi...`;
          reportLink.href = '#';
     }
 
     reportSection.classList.remove('hidden');
+    
+    // V4 DÜZELTME: Sadece BAŞARILI analizden sonra formları temizle
+    fileInput.value = '';
+    youtubeUrlInput.value = '';
+    
     fetchHistory(); 
 }
 
@@ -313,12 +332,11 @@ async function fetchHistory() {
 }
 
 
-// --- UYGULAMA BAŞLANGICI (CRITICAL FIX UYGULANDI) ---
+// --- UYGULAMA BAŞLANGICI ---
 document.addEventListener('DOMContentLoaded', () => {
     loadTokenAndValidate();
-    // Olay dinleyicilerini DOM yüklendikten sonra bağla
+    
     logoutButton.addEventListener('click', logout);
     fetchHistoryButton.addEventListener('click', fetchHistory);
-    // CRITICAL FIX: Analiz butonunu DOM yüklendikten sonra bağla
     analyzeButton.addEventListener('click', startAnalysis);
 });
