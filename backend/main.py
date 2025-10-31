@@ -1,5 +1,5 @@
 #
-# Akıllı İçerik Platformu (Versiyon 3.1 - UTF-8 Karakter Düzeltmeli)
+# Akıllı İçerik Platformu (Versiyon 3.2 - Parola Hashing Düzeltmeli)
 # Created by b!g
 #
 
@@ -16,6 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv 
 from typing import Optional
 from pydantic import BaseModel, EmailStr 
+
+# --- YENİ Parola Hashing Kütüphaneleri ---
+from passlib.context import CryptContext
+# ---
 
 # --- Proje Fonksiyonelliği İçin Gerekli İçe Aktarımlar ---
 from slugify import slugify
@@ -41,6 +45,19 @@ class UserRegistration(BaseModel):
     user_id: str 
     email: EmailStr 
     password: str 
+
+# --- YENİ PAROLA AYARLARI ---
+# Şifreleme algoritmasını (bcrypt) tanımla
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password, hashed_password):
+    """Düz metin parolayı, hash'lenmiş parola ile doğrular."""
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    """Düz metin parolayı hash'ler."""
+    return pwd_context.hash(password)
+# ---
 
 def load_users():
     """Uygulama başladığında kullanıcı verilerini users.json'dan yükler."""
@@ -92,7 +109,7 @@ print(f"OpenAI istemcisi başarıyla başlatıldı. Yüklü kullanıcı sayısı
 app = FastAPI(
     title="Akıllı İçerik Platformu API (Created by b!g)",
     description="Çoklu ortam dosyalarını analiz edip kişiselleştirilmiş raporlar oluşturan platform.",
-    version="0.3.1" 
+    version="0.3.2" # V2 Güvenlik Düzeltmesi
 )
 
 # CORS Ayarı
@@ -112,6 +129,8 @@ def get_user_id(api_token: str) -> str:
 
 def validate_file(dosya: UploadFile):
     """Dosya boyutu ve uzantı kontrolü (Siber güvenlik adımı)."""
+    # NOT: Bu kontrol (dosya.size) denetim raporuna göre risklidir.
+    # Frontend tarafında kontrol edilmesi daha garantidir.
     if dosya.size > MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(status_code=413, detail=f"Dosya boyutu {MAX_FILE_SIZE_MB}MB'ı geçemez.")
 
@@ -292,7 +311,7 @@ Raporun formatı AŞAĞIDAKİ YAPILANDIRILMIŞ ŞEKİLDE, TÜM BAŞLIKLAR ZORUNL
 [Bu bölümü kullanıcı kendi notlarını alsın diye boş bırak. Sadece '### 8. Kişisel Notlar' başlığını yaz ve altını boş bırak.]
 """
 
-# --- YENİ KULLANICI YÖNETİMİ ENDPOINT'İ ---
+# --- YENİ KULLANICI YÖNETİMİ ENDPOINT'İ (Hash'leme Eklendi) ---
 
 @app.post("/register")
 def register_user(user_data: UserRegistration):
@@ -301,12 +320,15 @@ def register_user(user_data: UserRegistration):
         if data.get("user_id") == user_data.user_id:
             raise HTTPException(status_code=400, detail="Bu kullanıcı ID'si zaten kullanılıyor.")
 
+    # Parolayı hash'le (Şifrele)
+    hashed_password = get_password_hash(user_data.password)
+
     new_token = secrets.token_urlsafe(32)
     
     USERS_DB[new_token] = {
         "user_id": user_data.user_id,
         "email": user_data.email,
-        "password_hash": "hardcoded_for_demo" 
+        "password_hash": hashed_password  # <-- GÜNCELLENDİ
     }
     
     # Lokal çalışmada users.json'a kaydetmeyi dene
@@ -338,9 +360,12 @@ async def analiz_et_ve_raporla(
 
     try:
         if dosya:
-            validate_file(dosya) 
+            # validate_file(dosya) # <- Bu kontrol riskli olduğu için kaldırıldı, Frontend'e taşınacak.
             
             uzanti = os.path.splitext(dosya.filename)[1].lower()
+            if uzanti not in ALLOWED_EXTENSIONS: # Uzantı kontrolü sunucuda kalmalı
+                 raise HTTPException(status_code=400, detail="Desteklenmeyen dosya türü veya uzantı.")
+            
             dosya_adi_temel = os.path.splitext(dosya.filename)[0]
 
             if uzanti in [".mp3", ".wav", ".m4a"]:

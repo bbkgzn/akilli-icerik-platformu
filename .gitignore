@@ -6,4 +6,5 @@ reports/           # Kullanıcı raporları (yüklü olmamalı)
 # --- Python ve Ortam Dosyaları ---
 __pycache__/
 *.pyc
-venv/              # Sanal ortam klasörü
+venv/              # Sanal ortam klasörü*.pdf
+*.json

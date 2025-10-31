@@ -1,8 +1,9 @@
-// frontend/script.js
+// frontend/script.js (V2 Güvenlik Güncellemesi)
 
 // --- 1. SABİT TANIMLAMALAR ---
-const API_BASE_URL = 'http://127.0.0.1:8000';
+const API_BASE_URL = 'https://akilli-icerik-platformu.onrender.com';
 const TOKEN_STORAGE_KEY = 'akilliAsistanToken';
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB (Tespit 2.1)
 let currentToken = '';
 
 // DOM Elementleri
@@ -60,7 +61,9 @@ function saveToken(token) {
 function loadToken() {
     const token = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (token) {
-        // Token'ı kontrol etmeden direkt yükle (varsayalım ki geçerli)
+        // V2 Notu (Tespit 2.2): Bu hala "gerçek" bir doğrulama değil.
+        // Sadece token'ın varlığını kontrol eder.
+        // Adım 3'te buraya bir /me endpoint'i ekleyeceğiz.
         saveToken(token); 
     } else {
         authSection.classList.remove('hidden');
@@ -71,8 +74,6 @@ function loadToken() {
 function checkToken() {
     const token = apiTokenInput.value.trim();
     if (token) {
-        // Basitçe: token doluysa ve önceki kullanıcı ID'lerine uyuyorsa, doğru kabul et.
-        // Gerçek bir sistemde burada '/check-token' gibi bir API çağrısı yapılır.
         saveToken(token);
     } else {
         showMessage(authStatus, 'Lütfen bir Token girin.', true);
@@ -103,7 +104,6 @@ registerForm.addEventListener('submit', async (e) => {
         if (response.ok) {
             saveToken(data.token);
             showMessage(registerStatus, `Kayıt başarılı! Yeni Token'ınız kaydedildi.`, false);
-            // Formu temizle
             registerForm.reset(); 
         } else {
             showMessage(registerStatus, `Kayıt Hatası: ${data.detail || data.message || 'Bilinmeyen Hata'}`, true);
@@ -138,6 +138,16 @@ async function startAnalysis() {
         return;
     }
 
+    // --- YENİ (V2) DOSYA BOYUTU KONTROLÜ (Tespit 2.1) ---
+    if (file && file.size > MAX_FILE_SIZE_BYTES) {
+        const sizeInMB = (file.size / 1024 / 1024).toFixed(2);
+        showMessage(authStatus, `HATA: Dosya boyutu 50MB'ı geçemez. Yüklenen dosya: ${sizeInMB} MB`, true);
+        resetUI(); // UI'ı temizle ama token'ı tut
+        return; // Fonksiyonu durdur
+    }
+    // --- KONTROL SONU ---
+
+
     // Durumu Güncelle
     analyzeButton.disabled = true;
     progressContainer.classList.remove('hidden');
@@ -148,8 +158,6 @@ async function startAnalysis() {
         formData.append('dosya', file);
         updateProgress(10, `Dosya yükleniyor: ${file.name}`);
     } else if (youtubeUrl) {
-        // YouTube URL'si için FormData kullanmaya gerek yok, direkt query string ile gönderilebilir
-        // Ancak API tasarımımızda File ve URL'yi aynı endpoint'e gönderdiğimiz için FormData'yı basitleştirelim:
         formData.append('youtube_url', youtubeUrl);
         updateProgress(10, 'YouTube URL doğrulanıyor...');
     }
@@ -158,13 +166,10 @@ async function startAnalysis() {
     try {
         updateProgress(25, 'İçerik okunuyor (Whisper/OCR/PyPDF2)...');
 
-        // FastAPI'ye token ve veriyi gönderme
         const response = await fetch(`${API_BASE_URL}/analiz-et`, {
             method: 'POST',
             headers: {
-                // Token'ı HTTP Başlığında göndermek zorundayız (Backend Güvenliği)
                 'X-API-TOKEN': currentToken, 
-                // FormData kullandığımız için Content-Type'ı tarayıcı otomatik ayarlar
             },
             body: formData 
         });
@@ -174,11 +179,10 @@ async function startAnalysis() {
         const data = await response.json();
 
         if (response.ok) {
-            updateProgress(90, 'Rapor diske kaydediliyor...');
+            updateProgress(90, 'Rapor buluta kaydediliyor...');
             displayReport(data);
             updateProgress(100, 'Analiz Başarılı!');
         } else {
-            // API'den dönen HTTP hatasını göster (400, 401, 500 vb.)
             showMessage(authStatus, `API Hatası (${response.status}): ${data.detail || 'Bilinmeyen Hata'}`, true);
             resetUI();
         }
@@ -197,11 +201,12 @@ function displayReport(data) {
     const reportContent = document.getElementById('report-content');
     const reportLink = document.getElementById('report-link');
     
-    // Markdown'ı HTML'e çevir
-    const htmlContent = marked.parse(data.rapor_markdown);
+    // --- YENİ (V2) XSS GÜVENLİK DÜZELTMESİ (Tespit 2.6) ---
+    // Markdown'ı HTML'e çevir ve DOMPurify ile temizle
+    const htmlContent = DOMPurify.sanitize(marked.parse(data.rapor_markdown));
     reportContent.innerHTML = htmlContent;
+    // --- DÜZELTME SONU ---
     
-    // Kaydedilen dosyaya link ver
     if (data.dosya_url) {
         reportLink.href = data.dosya_url;
         reportLink.textContent = `Raporu İndir: ${data.dosya_url.split('/').pop()}`;
