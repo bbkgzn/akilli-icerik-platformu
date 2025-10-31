@@ -1,5 +1,5 @@
 #
-# Akıllı İçerik Platformu (Versiyon 3.2 - Parola Hashing Düzeltmeli)
+# Akıllı İçerik Platformu (Versiyon 4.0 - Kalıcı PostgreSQL Veritabanı)
 # Created by b!g
 #
 
@@ -10,16 +10,18 @@ import io
 import base64
 import json 
 import secrets 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Depends, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.concurrency import run_in_threadpool # Tespit 2.3 (Async Bloklama) Çözümü
 from dotenv import load_dotenv 
-from typing import Optional
-from pydantic import BaseModel, EmailStr 
+from typing import Optional, List
 
-# --- YENİ Parola Hashing Kütüphaneleri ---
-from passlib.context import CryptContext
-# ---
+# --- Veritabanı İçe Aktarımları (Yeni V2 Mimarisi) ---
+from sqlalchemy.orm import Session
+from . import crud, models, schemas
+from .database import SessionLocal, engine, init_db
 
 # --- Proje Fonksiyonelliği İçin Gerekli İçe Aktarımlar ---
 from slugify import slugify
@@ -32,51 +34,8 @@ import docx
 import pptx           
 import pytube         
 
-# --- YENİ BULUT DEPOLAMA KÜTÜPHANESİ ---
+# --- Bulut Depolama Kütüphanesi ---
 from google.cloud import storage 
-
-
-# --- KULLANICI YÖNETİMİ (Dinamik) ---
-USER_DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'users.json')
-USERS_DB = {} 
-
-# Kullanıcı Kayıt Modelini Tanımlama
-class UserRegistration(BaseModel):
-    user_id: str 
-    email: EmailStr 
-    password: str 
-
-# --- YENİ PAROLA AYARLARI ---
-# Şifreleme algoritmasını (bcrypt) tanımla
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def verify_password(plain_password, hashed_password):
-    """Düz metin parolayı, hash'lenmiş parola ile doğrular."""
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    """Düz metin parolayı hash'ler."""
-    return pwd_context.hash(password)
-# ---
-
-def load_users():
-    """Uygulama başladığında kullanıcı verilerini users.json'dan yükler."""
-    global USERS_DB
-    try:
-        with open(USER_DB_PATH, 'r', encoding='utf-8') as f:
-            USERS_DB = json.load(f)
-    except FileNotFoundError:
-        USERS_DB = {}
-    except json.JSONDecodeError:
-        print("HATA: users.json dosyası bozuk veya yanlış formatta.")
-        USERS_DB = {}
-
-def save_users():
-    """Kullanıcı verilerini users.json dosyasına kaydeder."""
-    # NOTE: Lokal çalışmada users.json'a kaydetmeyi dener
-    with open(USER_DB_PATH, 'w', encoding='utf-8') as f:
-        json.dump(USERS_DB, f, indent=4, ensure_ascii=False)
-
 
 # --- GÜVENLİK VE GCS AYARLARI ---
 MAX_FILE_SIZE_MB = 50 
@@ -84,64 +43,80 @@ ALLOWED_EXTENSIONS = {
     ".mp3", ".wav", ".m4a", ".pdf", ".docx", ".doc", ".pptx", ".ppt", 
     ".jpg", ".jpeg", ".png"
 }
-
-# --- GCS DEPOLAMA SABİTLERİ (Render Çevresel Değişkenleri ile çalışır) ---
 GCS_KEY_ENV_VAR = "GCS_SA_KEY" 
 GCS_BUCKET_NAME = "akilli-icerik-raporlari-bbkgzn" # Kendi bucket adınız
-
 
 # --- API Anahtarını Yükleme ---
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 if openai.api_key is None and not os.getenv("RENDER"): 
-    # Sadece lokal çalışmada .env yoksa hata ver
     raise EnvironmentError("OPENAI_API_KEY .env dosyasında ayarlanmamış.")
 
-# API Key'i çevresel değişkenlerden alarak OpenAI client'ı başlat
 client = openai.OpenAI(api_key=openai.api_key or os.getenv("OPENAI_API_KEY"))
 
-# UYGULAMA BAŞLANGICI: Kullanıcıları Yükle
-load_users()
-print(f"OpenAI istemcisi başarıyla başlatıldı. Yüklü kullanıcı sayısı: {len(USERS_DB)}")
-
+# --- VERİTABANI BAŞLATMA ---
+# NOT: Artık USERS_DB veya load_users() yok.
+# Tabloların veritabanında oluşturulmasını sağlıyoruz.
+try:
+    init_db()
+except Exception as e:
+    print(f"Veritabanı başlatma hatası (uygulama başlarken): {e}")
+    # Render'ın yeniden başlatma döngüsüne girmemesi için devam et
+    
 # --- FastAPI Sunucusunu Başlatma ---
 app = FastAPI(
-    title="Akıllı İçerik Platformu API (Created by b!g)",
+    title="Akıllı İçerik Platformu API (V2 - Kalıcı DB)",
     description="Çoklu ortam dosyalarını analiz edip kişiselleştirilmiş raporlar oluşturan platform.",
-    version="0.3.2" # V2 Güvenlik Düzeltmesi
+    version="0.4.0" 
 )
 
-# CORS Ayarı
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True,
     allow_methods=["*"], allow_headers=["*"],
 )
 
-# --- YARDIMCI GÜVENLİK FONKSİYONLARI ---
-def get_user_id(api_token: str) -> str:
-    """Token'ı kontrol eder ve kullanıcı ID'sini döndürür (USERS_DB'den)."""
-    user_data = USERS_DB.get(api_token)
-    if not user_data:
-        raise HTTPException(status_code=401, detail="Geçersiz veya Eksik X-API-TOKEN. Lütfen geçerli bir erişim kodu sağlayın.")
-    return user_data.get("user_id")
+# --- VERİTABANI BAĞIMLILIĞI (Dependency Injection) ---
+def get_db():
+    """
+    Her API isteği için bağımsız bir veritabanı oturumu (session) açar
+    ve işlem bittiğinde (hata alsa bile) kapatır.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def validate_file(dosya: UploadFile):
-    """Dosya boyutu ve uzantı kontrolü (Siber güvenlik adımı)."""
-    # NOT: Bu kontrol (dosya.size) denetim raporuna göre risklidir.
-    # Frontend tarafında kontrol edilmesi daha garantidir.
-    if dosya.size > MAX_FILE_SIZE_MB * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"Dosya boyutu {MAX_FILE_SIZE_MB}MB'ı geçemez.")
+# --- YENİ GÜVENLİK VE KİMLİK DOĞRULAMA (Tespit 2.2 Çözümü) ---
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token") # /token endpoint'ini kullanır
 
-    uzanti = os.path.splitext(dosya.filename)[1].lower()
-    if uzanti not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="Desteklenmeyen dosya türü veya uzantı.")
+async def get_current_user_from_token(
+    db: Session = Depends(get_db), 
+    token: str = Header(..., alias="X-API-TOKEN")
+) -> models.User:
+    """
+    X-API-TOKEN başlığından gelen token'ı alır,
+    veritabanında (crud.py) arar ve ilgili kullanıcıyı döndürür.
+    Bu, eski get_user_id'nin yerini alır ve çok daha güvenlidir.
+    """
+    user = crud.get_user_by_token(db, token=token)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Geçersiz veya süresi dolmuş X-API-TOKEN",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
 
-# --- AKILLI DOSYA OKUMA İŞLEVLERİ (TÜMÜ) ---
-
+# --- AKILLI DOSYA OKUMA İŞLEVLERİ (DEĞİŞİKLİK YOK) ---
+# read_audio, read_pdf, read_docx, read_pptx, read_image, download_youtube_audio...
+# (Bu fonksiyonlar bir önceki kodla aynı, buraya kopyalamıyorum,
+# ancak tam kodda olmalılar. Eğer main.py'yi SİLİP YAPIŞTIRIYORSANIZ,
+# bu fonksiyonları ÖNCEKİ main.py'den kopyalayıp buraya ekleyin.)
+# --- (OKUMA FONKSİYONLARI BURADA) ---
 def read_audio(file_data: UploadFile) -> str:
-    """Yüklenen ses dosyasından metni Whisper ile okur."""
     try:
         transcription = client.audio.transcriptions.create(
             model="whisper-1", 
@@ -149,12 +124,9 @@ def read_audio(file_data: UploadFile) -> str:
         )
         return transcription.text
     except Exception as e:
-        print(f"Whisper Okuma Hatası: {e}")
-        return ""
-
+        raise HTTPException(status_code=500, detail=f"Whisper Okuma Hatası: {e}")
 
 def read_pdf(file_data: UploadFile) -> str:
-    """Yüklenen PDF dosyasından metni PyPDF2 ile okur."""
     full_text = []
     try:
         reader = PyPDF2.PdfReader(file_data.file)
@@ -162,28 +134,22 @@ def read_pdf(file_data: UploadFile) -> str:
             text = page.extract_text()
             if text:
                 full_text.append(text)
-                
         return "\n".join(full_text)
     except Exception as e:
-        print(f"PDF Okuma Hatası: {e}")
-        return ""
+        raise HTTPException(status_code=400, detail=f"PDF Okuma Hatası: Dosya bozuk veya şifreli olabilir. {e}")
 
 def read_docx(file_data: UploadFile) -> str:
-    """Yüklenen DOCX dosyasından metni python-docx ile okur."""
     full_text = []
     try:
         document = docx.Document(file_data.file)
         for para in document.paragraphs:
             if para.text.strip():
                 full_text.append(para.text)
-                
         return "\n".join(full_text)
     except Exception as e:
-        print(f"DOCX Okuma Hatası: {e}")
-        return ""
+        raise HTTPException(status_code=400, detail=f"DOCX Okuma Hatası: {e}")
 
 def read_pptx(file_data: UploadFile) -> str:
-    """Yüklenen PPTX dosyasından metni python-pptx ile okur."""
     full_text = []
     try:
         presentation = pptx.Presentation(file_data.file)
@@ -192,67 +158,43 @@ def read_pptx(file_data: UploadFile) -> str:
                 if hasattr(shape, "text"):
                     if shape.text.strip():
                         full_text.append(shape.text)
-            
             if slide.has_notes_slide:
                 notes_slide = slide.notes_slide
                 if notes_slide.notes_text_frame.text.strip():
                     full_text.append(notes_slide.notes_text_frame.text)
-        
         return "\n".join(full_text)
     except Exception as e:
-        print(f"PPTX Okuma Hatası: {e}")
-        return ""
-
+        raise HTTPException(status_code=400, detail=f"PPTX Okuma Hatası: {e}")
 
 def read_image(file_data: UploadFile) -> str:
-    """Yüklenen görselden metni GPT-4o Vizyon ile okur (OCR)."""
     try:
         image_bytes = file_data.file.read()
         base64_image = base64.b64encode(image_bytes).decode('utf-8')
-
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Bu görseldeki tüm metni eksiksiz bir şekilde OCR yaparak metin olarak çıkarın. Çıkan metinle ilgili yorum yapmayın, sadece metni döndürün."},
-                        {"type": "image_url", "image_url": {"url": f"data:{file_data.content_type};base64,{base64_image}"}}
-                    ],
-                }
-            ],
-            max_tokens=4096, 
-        )
-        
+                {"role": "user", "content": [
+                    {"type": "text", "text": "Bu görseldeki tüm metni eksiksiz bir şekilde OCR yaparak metin olarak çıkarın. Çıkan metinle ilgili yorum yapmayın, sadece metni döndürün."},
+                    {"type": "image_url", "image_url": {"url": f"data:{file_data.content_type};base64,{base64_image}"}}
+                ]}], max_tokens=4096)
         return response.choices[0].message.content
-        
     except Exception as e:
-        print(f"Görsel (OCR) Okuma Hatası: {e}")
-        return ""
+        raise HTTPException(status_code=500, detail=f"Görsel (OCR) Okuma Hatası: {e}")
 
 def download_youtube_audio(url: str) -> str:
-    """YouTube URL'sinden sesi indirir ve Whisper ile metne çevirir."""
     temp_dir = "./temp"
     os.makedirs(temp_dir, exist_ok=True)
     temp_file_path = None
-
     try:
         yt = pytube.YouTube(url)
         audio_stream = yt.streams.get_audio_only()
-
         temp_file_path = audio_stream.download(output_path=temp_dir, filename_prefix="yt_")
-
         with open(temp_file_path, "rb") as audio_file:
-            transcription = client.audio.transcriptions.create(
-                model="whisper-1", 
-                file=audio_file
-            )
+            transcription = client.audio.transcriptions.create(model="whisper-1", file=audio_file)
             return transcription.text
-
     except pytube.exceptions.VideoUnavailable:
         raise HTTPException(status_code=400, detail="YouTube: Video erişilebilir değil veya silinmiş.")
     except Exception as e:
-        print(f"YouTube Ses İşleme Hatası: {e}")
         raise HTTPException(status_code=500, detail=f"YouTube/Whisper İşleme Hatası: {str(e)}")
     finally:
         if temp_file_path and os.path.exists(temp_file_path):
@@ -262,127 +204,171 @@ def download_youtube_audio(url: str) -> str:
                 os.rmdir(temp_dir)
 
 
-# --- RAPOR PROMPTU (8 Başlık) ---
+# --- RAPOR PROMPTU (DEĞİŞİKLİK YOK) ---
+RAPOR_PROMPTU = """
+(ÖNCEKİ main.py'den RAPOR_PROMPTU metninin tamamını buraya kopyalayın)
+"""
 RAPOR_PROMPTU = """
 Sen, 'Akıllı İçerik Platformu' adına çalışan, detay odaklı bir yapay zekâ uzmanısın. 
 Görevin, sana verilen bir içerik metnini analiz etmek ve bu metni, öğrenmeyi ve eyleme geçmeyi kolaylaştıracak şekilde, 8 ana başlıkta özetleyen net bir **Markdown (.md) formatında rapor** hazırlamaktır.
-
 Raporun formatı AŞAĞIDAKİ YAPILANDIRILMIŞ ŞEKİLDE, TÜM BAŞLIKLAR ZORUNLU OLARAK OLMALIDIR:
-
 ### 1. Konu Özeti (3-5 Cümle)
 [Buraya içeriğin genel amacını ve ana temasını 3-5 net cümle ile yaz.]
-
 ### 2. Konu Bölümlendirme (Gezinme Haritası)
 [İçeriğin ana başlıklarını ve mantıksal akışını gösteren bir liste hazırla. Bölüm başlıklarını net bir şekilde listele.]
 * Bölüm 1 Adı
 * Bölüm 2 Adı
 * ...
-
 ### 3. Temel Kavramlar Sözlüğü (Markdown Tablosu)
 ["Bu içerikte bilmem gereken kilit kelimeler neler?" sorusuna cevap ver. Bu kavramları ve kısa tanımlarını içeren iki sütunlu bir Markdown Tablosu oluştur. Tabloya en az 5 temel kavram ekle.]
-
 | Kavram | Tanım |
 |---|---|
 | Bilgi Güvenliği | Hassas verilerin yetkisiz erişime karşı korunması. |
 | ... | ... |
-
 ### 4. Öğrenme Çıkarımları (Liste)
 [Bu içerik bittiğinde aklımda kalması gereken 3 ana prensibi maddeler halinde, kısa ve öz olarak yaz.]
 * Ana prensip 1
 * Ana prensip 2
 * ...
-
 ### 5. Pratik Öneri (1 Paragraf)
 [Bu bilgiyi gerçek hayatta veya iş akışında nasıl kullanabileceğine dair 1 paragraflık somut bir eylem önerisi yaz.]
-
 ### 6. Faydalı Kaynaklar ve Araçlar (Liste)
 [İçeriğin konusuyla ilgili, öğrenmeyi derinleştirecek ve işe yarayacak 3-5 adet ek kaynak, araç, program, site veya bu alandaki uzmanların adını bir liste olarak öner.]
 * Kaynak/Araç 1 (Kısa açıklama)
 * Kaynak/Araç 2 (Kısa açıklama)
 * ...
-
 ### 7. Mini Quiz (3-5 Soru)
 [Kullanıcının konuyu ne kadar anladığını test etmek için 3 adet, kısa cevaplı veya çoktan seçmeli, kritik soru hazırla. Her sorunun hemen altına DOĞRU CEVABI da **parantez içinde** belirt.]
 1. Soru 1? (Cevap: ...)
 2. Soru 2? (Cevap: ...)
 3. Soru 3? (Cevap: ...)
-
 ### 8. Kişisel Notlar (Boş Alan)
 [Bu bölümü kullanıcı kendi notlarını alsın diye boş bırak. Sadece '### 8. Kişisel Notlar' başlığını yaz ve altını boş bırak.]
 """
 
-# --- YENİ KULLANICI YÖNETİMİ ENDPOINT'İ (Hash'leme Eklendi) ---
+# --- YENİ KULLANICI VE OTURUM ENDPOINT'LERİ ---
 
-@app.post("/register")
-def register_user(user_data: UserRegistration):
-    """Yeni kullanıcı kaydını dinamik olarak yapar ve token döndürür."""
-    for data in USERS_DB.values():
-        if data.get("user_id") == user_data.user_id:
-            raise HTTPException(status_code=400, detail="Bu kullanıcı ID'si zaten kullanılıyor.")
-
-    # Parolayı hash'le (Şifrele)
-    hashed_password = get_password_hash(user_data.password)
-
-    new_token = secrets.token_urlsafe(32)
+@app.post("/register", response_model=schemas.TokenResponse, tags=["Kimlik Doğrulama"])
+async def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    """
+    Yeni kullanıcıyı kalıcı PostgreSQL veritabanına kaydeder
+    ve onun için kalıcı bir Token oluşturur.
+    """
+    # E-posta veya Kullanıcı ID'si zaten var mı diye kontrol et
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Bu e-posta adresi zaten kayıtlı.")
     
-    USERS_DB[new_token] = {
-        "user_id": user_data.user_id,
-        "email": user_data.email,
-        "password_hash": hashed_password  # <-- GÜNCELLENDİ
-    }
+    db_user_by_id = crud.get_user_by_user_id_str(db, user_id_str=user.user_id_str)
+    if db_user_by_id:
+        raise HTTPException(status_code=400, detail="Bu kullanıcı ID'si zaten kullanılıyor.")
     
-    # Lokal çalışmada users.json'a kaydetmeyi dene
-    if not os.getenv("RENDER"):
-        save_users()
+    # Yeni kullanıcıyı veritabanında oluştur
+    db_user = crud.create_user(db=db, user=user)
+    
+    # Kullanıcı için yeni bir Token oluştur ve DB'ye kaydet
+    new_token_str = secrets.token_urlsafe(32)
+    crud.create_user_token(db=db, user=db_user, token=new_token_str)
+    
+    return {"access_token": new_token_str, "token_type": "bearer"}
 
-    return {
-        "user_id": user_data.user_id,
-        "token": new_token,
-        "message": f"Kayıt başarılı. Token'ınız ile analiz yapmaya başlayabilirsiniz. Token'ı X-API-TOKEN başlığında kullanın."
-    }
+@app.post("/token", response_model=schemas.TokenResponse, tags=["Kimlik Doğrulama"])
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
+):
+    """
+    Kullanıcının (user_id_str) ve şifresinin (password)
+    veritabanındaki hash ile eşleşip eşleşmediğini kontrol eder.
+    Eşleşirse, yeni bir token oluşturur.
+    NOT: Frontend'in 'Giriş Yap' formu bu endpoint'i kullanmalı.
+    """
+    # Not: OAuth2PasswordRequestForm "username" alanı bekler.
+    # Biz burada "username" alanını "user_id_str" olarak kullanıyoruz.
+    user = crud.get_user_by_user_id_str(db, user_id_str=form_data.username)
+    
+    if not user or not crud.verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Geçersiz kullanıcı ID'si veya şifre",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Başarılı girişte yeni bir Token oluştur ve DB'ye kaydet
+    new_token_str = secrets.token_urlsafe(32)
+    crud.create_user_token(db=db, user=user, token=new_token_str)
+    
+    return {"access_token": new_token_str, "token_type": "bearer"}
 
 
-# --- ANA İŞLEM ENDPOINT'i ---
+@app.get("/users/me", response_model=schemas.User, tags=["Kimlik Doğrulama"])
+async def read_users_me(current_user: models.User = Depends(get_current_user_from_token)):
+    """
+    X-API-TOKEN'ı doğrular ve ilgili kullanıcıyı döndürür.
+    Frontend'in "token geçerli mi?" kontrolü (Tespit 3.2) için kullanılır.
+    """
+    return current_user
 
-@app.post("/analiz-et", tags=["Ana Akış (Tüm Dosya Tipleri)"])
+
+# --- YENİ RAPOR ENDPOINT'LERİ (Tespit 3.3 Çözümü) ---
+
+@app.get("/reports/my-reports", response_model=List[schemas.Report], tags=["Raporlama"])
+async def read_user_reports(
+    current_user: models.User = Depends(get_current_user_from_token),
+    db: Session = Depends(get_db)
+):
+    """
+    Geçerli kullanıcının tüm geçmiş raporlarını (GCS linklerini)
+    veritabanından listeler.
+    """
+    reports = crud.get_user_reports(db, user_id=current_user.id)
+    return reports
+
+
+# --- ANA İŞLEM ENDPOINT'i (YENİDEN YAZILDI) ---
+
+@app.post("/analiz-et", tags=["Raporlama"])
 async def analiz_et_ve_raporla(
     dosya: Optional[UploadFile] = File(None), 
     youtube_url: Optional[str] = None,       
-    api_token: Optional[str] = Header(None, alias="X-API-TOKEN") 
+    current_user: models.User = Depends(get_current_user_from_token),
+    db: Session = Depends(get_db) 
 ):
     
-    # 1. GÜVENLİK KONTROLÜ (Token ile Kullanıcı Kimliği)
-    user_id = get_user_id(api_token)
-    
-    # 2. İÇERİK TÜRÜNÜ BELİRLEME ve OKUMA
+    # 1. GÜVENLİK KONTROLÜ
+    # 'current_user' bağımlılığı (Depends) sayesinde token kontrolü zaten yapıldı.
+    # 'current_user' objesi elimizde.
+    user_id = current_user.id
+    user_id_str = current_user.user_id_str
+
+    # 2. İÇERİK TÜRÜNÜ BELİRLEME ve OKUMA (Async Bloklama Çözümü ile)
     metin = ""
     dosya_adi_temel = "Analiz_Raporu"
 
     try:
         if dosya:
-            # validate_file(dosya) # <- Bu kontrol riskli olduğu için kaldırıldı, Frontend'e taşınacak.
-            
+            # Uzantı kontrolü (Dosya boyutu Frontend'de kontrol edildi)
             uzanti = os.path.splitext(dosya.filename)[1].lower()
-            if uzanti not in ALLOWED_EXTENSIONS: # Uzantı kontrolü sunucuda kalmalı
-                 raise HTTPException(status_code=400, detail="Desteklenmeyen dosya türü veya uzantı.")
+            if uzanti not in ALLOWED_EXTENSIONS:
+                 raise HTTPException(status_code=400, detail="Desteklenmeyen dosya türü.")
             
             dosya_adi_temel = os.path.splitext(dosya.filename)[0]
 
+            # Yavaş I/O işlemlerini threadpool'da çalıştır (Tespit 2.3)
             if uzanti in [".mp3", ".wav", ".m4a"]:
-                metin = read_audio(dosya)
+                metin = await run_in_threadpool(read_audio, dosya)
             elif uzanti == ".pdf":
-                metin = read_pdf(dosya)
+                metin = await run_in_threadpool(read_pdf, dosya)
             elif uzanti in [".docx", ".doc"]:
-                metin = read_docx(dosya)
+                metin = await run_in_threadpool(read_docx, dosya)
             elif uzanti in [".pptx", ".ppt"]:
-                metin = read_pptx(dosya)
+                metin = await run_in_threadpool(read_pptx, dosya)
             elif uzanti in [".jpg", ".jpeg", ".png"]:
-                metin = read_image(dosya)
+                metin = await run_in_threadpool(read_image, dosya)
             else:
                 raise HTTPException(status_code=400, detail="Desteklenmeyen dosya türü.")
         
         elif youtube_url:
-            metin = download_youtube_audio(youtube_url)
+            metin = await run_in_threadpool(download_youtube_audio, youtube_url)
             dosya_adi_temel = f"youtube-video-analizi"
         
         else:
@@ -392,78 +378,85 @@ async def analiz_et_ve_raporla(
         raise h 
     except Exception as e:
         print(f"İçerik Okuma Başarısız: {e}")
-        raise HTTPException(status_code=500, detail="İçerik Okuma Başarısız oldu. Dosya bozuk olabilir.")
+        raise HTTPException(status_code=500, detail=f"İçerik Okuma Başarısız oldu. {e}")
 
-
-    # 3. METİN ANALİZİ (GPT-4o)
+    # 3. METİN ANALİZİ (GPT-4o) (Async Bloklama Çözümü ile)
     if not metin or metin.strip() == "":
-         raise HTTPException(status_code=400, detail="İçerikten metin çıkarılamadı.")
+         raise HTTPException(status_code=400, detail="İçerikten metin çıkarılamadı (Dosya boş veya okunamadı).")
 
     try:
-        chat_completion = client.chat.completions.create(
-            model="gpt-4o",   
-            messages=[
-                {"role": "system", "content": RAPOR_PROMPTU},
-                {"role": "user", "content": f"Lütfen aşağıdaki içerik metnini analiz et ve raporla:\n\n{metin}"}
-            ]
-        )
+        # OpenAI çağrısı yavaş bir I/O işlemidir, threadpool'a gönder
+        def run_openai_call():
+            return client.chat.completions.create(
+                model="gpt-4o",   
+                messages=[
+                    {"role": "system", "content": RAPOR_PROMPTU},
+                    {"role": "user", "content": f"Lütfen aşağıdaki içerik metnini analiz et ve raporla:\n\n{metin}"}
+                ]
+            )
+        
+        chat_completion = await run_in_threadpool(run_openai_call)
         rapor_metni = chat_completion.choices[0].message.content
-        print(f"Rapor oluşturuldu. Kullanıcı: {user_id}")
+        print(f"Rapor oluşturuldu. Kullanıcı: {user_id_str}")
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM/Raporlama hatası: {str(e)}")
 
 
-    # --- YENİ 4. KULLANICI BAZLI KAYIT VE KALICI GCS DEPOLAMA ---
+    # --- 4. KALICI GCS DEPOLAMA (Async Bloklama Çözümü ile) ---
     try:
-        # 1. GCS İstemcisini Başlatma
+        # 1. GCS İstemcisini Başlatma (Hızlı)
         sa_key_json = os.getenv(GCS_KEY_ENV_VAR)
         if not sa_key_json:
             raise Exception("GCS Service Account Key çevresel değişkeni ayarlanmadı.")
-
         credentials_dict = json.loads(sa_key_json)
-        
         gcs_client = storage.Client.from_service_account_info(credentials_dict)
         bucket = gcs_client.bucket(GCS_BUCKET_NAME)
 
-        # 2. Dosya Adını Oluşturma
+        # 2. Dosya Adını Oluşturma (Hızlı)
         temiz_ad = slugify(dosya_adi_temel)
         zaman_damgasi = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        gcs_file_name = f"{user_id_str}/{temiz_ad}_{zaman_damgasi}.md" # Klasör adı olarak user_id_str kullandık
         
-        # GCS dosya yolu: {kullanici_id}/{dosya_adi}.md
-        gcs_file_name = f"{user_id}/{temiz_ad}_{zaman_damgasi}.md"
+        # 3. GCS'e Yükleme (Yavaş I/O, threadpool'a gönder)
+        def run_gcs_upload():
+            blob = bucket.blob(gcs_file_name)
+            blob.upload_from_string(
+                data=rapor_metni.encode('utf-8'), 
+                content_type='text/markdown; charset=utf-8'
+            )
+            print(f"Rapor başarıyla GCS'e yüklendi: {gcs_file_name}")
         
-        # 3. GCS'e Yükleme
-        blob = bucket.blob(gcs_file_name)
+        await run_in_threadpool(run_gcs_upload)
         
-        # Rapor metnini UTF-8 olarak kodlayıp yükle ve charset'i belirt (DÜZELTME BURADA)
-        blob.upload_from_string(
-            data=rapor_metni.encode('utf-8'), 
-            content_type='text/markdown; charset=utf-8' # <-- UTF-8 DÜZELTMESİ
-        )
-            
-        print(f"Rapor başarıyla GCS'e yüklendi: {gcs_file_name}")
-        
-        # 4. Genel Erişim URL'sini Oluşturma
+        # 4. Genel Erişim URL'sini Oluşturma (Hızlı)
         kaydedilen_dosya_url = f"https://storage.googleapis.com/{GCS_BUCKET_NAME}/{gcs_file_name}"
 
     except Exception as e:
         print(f"HATA: Rapor GCS'e kaydedilemedi: {e}")
-        kaydedilen_dosya_url = None
+        raise HTTPException(status_code=500, detail=f"Bulut Depolama Hatası: Rapor GCS'e kaydedilemedi. {e}")
 
 
-    # 5. KULLANICIYA YANIT DÖNÜŞÜ
+    # --- 5. RAPORU VERİTABANINA KAYDETME (Tespit 3.3 Çözümü) ---
+    try:
+        report_schema = schemas.ReportCreate(
+            gcs_url=kaydedilen_dosya_url,
+            file_name=gcs_file_name
+        )
+        crud.create_user_report(db=db, report=report_schema, user_id=user_id)
+        print(f"Raporun GCS linki veritabanına kaydedildi. Kullanıcı: {user_id_str}")
+    
+    except Exception as e:
+        # Bu kritik bir hata değil, kullanıcı raporu yine de alır.
+        print(f"HATA: Rapor veritabanına kaydedilemedi (ama GCS'e yüklendi): {e}")
+
+
+    # 6. KULLANICIYA YANIT DÖNÜŞÜ
     return {
-        "user_id": user_id,
+        "user_id": user_id_str,
         "rapor_markdown": rapor_metni, 
         "dosya_url": kaydedilen_dosya_url
     }
 
-
-# --- Sunucuyu Çalıştırmak için Ana Giriş Noktası ---
-if __name__ == "__main__":
-    print("Sunucuyu başlatmak için terminalde PROJE ANA DİZİNİNDE şu komutu çalıştırın:")
-    print("uvicorn backend.main:app --reload")
-
-# --- FRONTEND VE RAPORLAR KLASÖRÜNÜ SUNMA (EN SON YÜKLENMELİ) ---
+# --- FRONTEND'İ SUNMA ---
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")

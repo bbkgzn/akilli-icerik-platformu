@@ -11,3 +11,7 @@ python-pptx
 pytube
 google-cloud-storage
 passlib[bcrypt]
+
+# --- YENİ V2 VERİTABANI KÜTÜPHANELERİ ---
+sqlalchemy
+psycopg2-binary

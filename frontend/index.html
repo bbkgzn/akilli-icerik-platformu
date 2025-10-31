@@ -14,42 +14,47 @@
     <header>
         <h1>Akıllı İçerik Platformu 🧠</h1>
         <p>Created by **b!g**</p>
+        <div id="user-info" class="hidden">
+            Merhaba, <strong id="user-display-id">...</strong> | <button id="logout-button">Çıkış Yap</button>
+        </div>
     </header>
 
     <main>
         <section id="auth-section">
-            <h2>🔐 Erişim Kodu (Token)</h2>
-            <p>Devam etmek için size verilen yetkilendirme kodunu girin.</p>
-            <input type="text" id="api-token" placeholder="X-API-TOKEN Kodu (Örn: SUPER_USER_CODE_b!g)">
-            <button onclick="checkToken()">Giriş Yap / Doğrula</button>
-            <p id="auth-status" class="status-message"></p>
-            <hr>
-            <details>
-                <summary>Yeni Kullanıcı Kaydı</summary>
-                <form id="register-form">
-                    <input type="text" id="reg-id" placeholder="Kullanıcı ID (Örn: yeni_kullanici)" required>
-                    <input type="email" id="reg-email" placeholder="E-posta" required>
-                    <input type="password" id="reg-password" placeholder="Şifre" required>
-                    <button type="submit">Kayıt Ol</button>
-                    <p id="register-status" class="status-message"></p>
-                </form>
-            </details>
+            <div class="auth-container">
+                <div class="auth-box">
+                    <h2>🔐 Giriş Yap</h2>
+                    <form id="login-form">
+                        <input type="text" id="login-id" placeholder="Kullanıcı ID" required>
+                        <input type="password" id="login-password" placeholder="Şifre" required>
+                        <button type="submit">Giriş Yap</button>
+                        <p id="login-status" class="status-message"></p>
+                    </form>
+                </div>
+                
+                <div class="auth-box">
+                    <h2>📝 Yeni Kullanıcı Kaydı</h2>
+                    <form id="register-form">
+                        <input type="text" id="reg-id" placeholder="Kullanıcı ID (Örn: yeni_kullanici)" required>
+                        <input type="email" id="reg-email" placeholder="E-posta" required>
+                        <input type="password" id="reg-password" placeholder="Şifre" required>
+                        <button type="submit">Kayıt Ol</button>
+                        <p id="register-status" class="status-message"></p>
+                    </form>
+                </div>
+            </div>
         </section>
 
         <section id="analysis-section" class="hidden">
             <h2>📚 İçerik Yükle & Analiz Et</h2>
             <p>Ses, PDF, Word, Görsel dosyası yükleyin veya bir YouTube linki girin.</p>
-
             <div class="input-group">
                 <input type="file" id="file-input" accept=".mp3, .wav, .m4a, .pdf, .docx, .pptx, .jpg, .jpeg, .png">
             </div>
-
             <div class="or-separator">VEYA</div>
-
             <div class="input-group">
                 <input type="url" id="youtube-url-input" placeholder="YouTube Video URL'si">
             </div>
-            
             <button id="analyze-button" onclick="startAnalysis()">Analizi Başlat</button>
 
             <div id="progress-container" class="hidden">
@@ -63,9 +68,15 @@
             <div class="report-header">
                 <p>Raporunuz kaydedildi: <a id="report-link" href="#" target="_blank">Dosyayı Görüntüle / İndir</a></p>
             </div>
-            <div id="report-content" class="markdown-body">
-                </div>
+            <div id="report-content" class="markdown-body"></div>
             <button onclick="window.print()">Sayfayı Yazdır (PDF Olarak Kaydet)</button>
+        </section>
+
+        <section id="history-section" class="hidden">
+            <h2>🗂️ Geçmiş Raporlarım</h2>
+            <button id="fetch-history-button">Raporlarımı Getir</button>
+            <ul id="history-list">
+                </ul>
         </section>
     </main>
     <footer>
