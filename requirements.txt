@@ -12,6 +12,6 @@ pytube
 google-cloud-storage
 passlib[bcrypt]
 
-# --- YENI V2 VERITABANI KUTUPHANELERI ---
+# --- YENİ V2 VERİTABANI KÜTÜPHANELERİ ---
 sqlalchemy
 psycopg2-binary
