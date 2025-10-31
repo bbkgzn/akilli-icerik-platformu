@@ -60,14 +60,14 @@ function resetUI() {
 // --- 3. YETKİLENDİRME (TOKEN) YÖNETİMİ ---
 
 /**
- * Başarılı bir giriş/kayıt sonrası UI'ı gücnceller.
+ * Başarılı bir giriş/kayıt sonrası UI'ı güceller.
  * @param {string} token - Alınan yeni token
- * @param {string} userIdStr - Kullanıcının ID'si (\u00f6rn: ali_yilmaz)
+ * @param {string} userIdStr - Kullanıcının ID'si (örn: ali_yilmaz)
  */
 function saveTokenAndLogin(token, userIdStr) {
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     currentToken = token;
-    
+
     // Arayüzü güncelle
     authSection.classList.add('hidden');
     analysisSection.classList.remove('hidden');
@@ -82,7 +82,7 @@ function saveTokenAndLogin(token, userIdStr) {
 function logout() {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     currentToken = '';
-    
+
     // Arayüzü sıfırla
     authSection.classList.remove('hidden');
     analysisSection.classList.add('hidden');
@@ -90,14 +90,14 @@ function logout() {
     reportSection.classList.add('hidden');
     userInfo.classList.add('hidden');
     userDisplayId.textContent = '...';
-    
+
     // Formları temizle (opsiyonel)
     loginForm.reset();
     registerForm.reset();
 }
 
 /**
- * Sayfa yüklendiğinde token'ı doğrular (Tespit 2.2 & 3.2 Çözümü)
+ * Sayfa yüklendiğinde token'ı doğrular (Tespit 2.2 & 3.2 Çözü̇mü)
  * Artık /users/me endpoint'ini kullanarak GERÇEK doğrulama yapar.
  */
 async function loadTokenAndValidate() {
@@ -136,7 +136,7 @@ async function loadTokenAndValidate() {
 registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     resetUI();
-    
+
     const user_id = document.getElementById('reg-id').value;
     const email = document.getElementById('reg-email').value;
     const password = document.getElementById('reg-password').value;
@@ -167,7 +167,7 @@ registerForm.addEventListener('submit', async (e) => {
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     resetUI();
-    
+
     const loginId = document.getElementById('login-id').value;
     const password = document.getElementById('login-password').value;
 
@@ -198,14 +198,14 @@ loginForm.addEventListener('submit', async (e) => {
     }
 });
 
-
 // --- 5. ANALİZ AKIŞI (V2) ---
 
 async function startAnalysis() {
-    resetUI();
+    // Note: resetUI() çağrısı başta değil; inputları okumadan once silinmemeli.
+
     const file = fileInput.files[0];
     const youtubeUrl = youtubeUrlInput.value.trim();
-    
+
     if (!currentToken) {
         showMessage(loginStatus, 'Lütfen önce giriş yapın.', true);
         logout(); // Token yoksa güvenlik için çıkış yap
@@ -229,11 +229,14 @@ async function startAnalysis() {
         return;
     }
 
+    // Şimdi tüm kontrollerden sonra arayüzü sıfırla
+    resetUI();
+
     // Durumu Güncelle
     analyzeButton.disabled = true;
     progressContainer.classList.remove('hidden');
     updateProgress(5, 'Yükleniyor...');
-    
+
     const formData = new FormData();
     if (file) {
         formData.append('dosya', file);
@@ -242,7 +245,7 @@ async function startAnalysis() {
         formData.append('youtube_url', youtubeUrl);
         updateProgress(10, 'YouTube URL doğrulanıyor...');
     }
-    
+
     try {
         updateProgress(25, 'İçerik okunuyor (Whisper/OCR/PyPDF2)...');
 
@@ -281,7 +284,6 @@ async function startAnalysis() {
     }
 }
 
-
 // --- 6. RAPOR GÖSTERİMİ (V2) ---
 
 function displayReport(data) {
@@ -296,8 +298,8 @@ function displayReport(data) {
         reportLink.href = data.dosya_url;
         reportLink.textContent = `Raporu İndir: ${data.dosya_url.split('/').pop()}`;
     } else {
-         reportLink.textContent = `Rapor kaydedilemedi (Sunucu Hatası), sadece aşağıda görüntüleniyor.`;
-         reportLink.href = '#';
+        reportLink.textContent = `Rapor kaydedilemedi (Sunucu Hatası), sadece aşağıda görüntüleniyor.`;
+        reportLink.href = '#';
     }
 
     reportSection.classList.remove('hidden');
@@ -306,7 +308,7 @@ function displayReport(data) {
     fetchHistory(); 
 }
 
-// --- 7. YENİ (V2): GEÇMİŞ RAPORLAR (Tespit 3.3 Çözümü) ---
+// --- 7. YENİ (V2): GEÇMİŞ RAPORLAR (Tespit 3.3 Çözü̇mü) ---
 
 async function fetchHistory() {
     if (!currentToken) return; // Giriş yapılmadıysa çalışma
@@ -335,7 +337,7 @@ async function fetchHistory() {
                     a.href = report.gcs_url;
                     a.target = '_blank';
                     
-                    // Tarihi formatla (\u00f6rn: 31.10.2025 18:30)
+                    // Tarihi formatla (örn: 31.10.2025 18:30)
                     const date = new Date(report.created_at);
                     const formattedDate = `${date.toLocaleDateString('tr-TR')} ${date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
                     
@@ -353,9 +355,8 @@ async function fetchHistory() {
     }
 }
 
-
 // --- UYGULAMA BAŞLANGICI ---
-// Sayfa yüklendiğinde token'ı doğrulamayı dene
+// Sayfa yüklendiğinde token'ı doğrulamaya dene
 document.addEventListener('DOMContentLoaded', loadTokenAndValidate);
 // Çıkış yap butonuna tıklamayı dinle
 logoutButton.addEventListener('click', logout);
